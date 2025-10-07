@@ -1,0 +1,1787 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>نظام ختم ملفات PDF</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/downloadjs/1.4.8/download.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3a0ca3;
+            --accent: #f72585;
+            --success: #4cc9f0;
+            --dark: #2b2d42;
+            --light: #f8f9fa;
+            --gradient: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', 'Tahoma', 'Geneva', 'Verdana', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            color: var(--dark);
+            padding: 0;
+            touch-action: pan-y;
+        }
+        
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            background-color: white;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            position: relative;
+        }
+        
+        header {
+            background: var(--gradient);
+            color: white;
+            padding: 15px 20px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+        
+        .logo i {
+            font-size: 1.8rem;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 8px;
+            border-radius: 8px;
+        }
+        
+        .logo-text h1 {
+            font-size: 1.4rem;
+            margin-bottom: 3px;
+        }
+        
+        .logo-text p {
+            opacity: 0.9;
+            font-size: 0.8rem;
+        }
+        
+        .main-content {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            -webkit-overflow-scrolling: touch;
+            height: calc(100vh - 140px);
+        }
+        
+        .section {
+            display: none;
+            animation: fadeIn 0.3s ease;
+            height: 100%;
+        }
+        
+        .section.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+            margin-bottom: 15px;
+        }
+        
+        .section-title {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .section-title i {
+            background: var(--gradient);
+            padding: 6px;
+            border-radius: 6px;
+            color: white;
+            font-size: 0.9rem;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: var(--dark);
+            font-size: 0.9rem;
+        }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: border 0.3s;
+            background: white;
+        }
+        
+        input:focus, textarea:focus, select:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(67, 97, 238, 0.1);
+        }
+        
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 600;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-height: 44px;
+        }
+        
+        .btn-primary {
+            background: var(--gradient);
+            color: white;
+        }
+        
+        .btn-primary:active {
+            transform: translateY(1px);
+            box-shadow: 0 2px 5px rgba(67, 97, 238, 0.3);
+        }
+        
+        .btn-secondary {
+            background: var(--success);
+            color: white;
+        }
+        
+        .btn-secondary:active {
+            background: #3ab8e0;
+            transform: translateY(1px);
+            box-shadow: 0 2px 5px rgba(76, 201, 240, 0.3);
+        }
+        
+        .btn-accent {
+            background: var(--accent);
+            color: white;
+        }
+        
+        .btn-accent:active {
+            background: #e11574;
+            transform: translateY(1px);
+            box-shadow: 0 2px 5px rgba(247, 37, 133, 0.3);
+        }
+        
+        .btn-telegram {
+            background: linear-gradient(135deg, #0088cc 0%, #00aced 100%);
+            color: white;
+        }
+        
+        .btn-telegram:active {
+            background: #0077b3;
+            transform: translateY(1px);
+            box-shadow: 0 2px 5px rgba(0, 136, 204, 0.3);
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .status-area {
+            margin-top: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+        }
+        
+        .status-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--primary);
+            font-size: 0.95rem;
+        }
+        
+        .status-message {
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            min-height: 80px;
+            max-height: 200px;
+            overflow-y: auto;
+            border-left: 3px solid var(--primary);
+            font-size: 0.9rem;
+        }
+        
+        .progress-container {
+            margin-top: 12px;
+        }
+        
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-size: 0.85rem;
+        }
+        
+        .progress-bar {
+            height: 10px;
+            background-color: #e9ecef;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .progress {
+            height: 100%;
+            background: var(--gradient);
+            width: 0%;
+            transition: width 0.5s;
+        }
+        
+        .file-upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 12px;
+            padding: 30px 15px;
+            text-align: center;
+            margin-bottom: 15px;
+            transition: border 0.3s;
+            cursor: pointer;
+        }
+        
+        .file-upload-area:active {
+            border-color: var(--primary);
+            background: rgba(67, 97, 238, 0.05);
+        }
+        
+        .file-upload-area i {
+            font-size: 2.5rem;
+            color: #adb5bd;
+            margin-bottom: 10px;
+        }
+        
+        .file-upload-area p {
+            color: #6c757d;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .category {
+            margin-bottom: 15px;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        }
+        
+        .category-header {
+            background: #f8f9fa;
+            padding: 12px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .category-header:active {
+            background: #e9ecef;
+        }
+        
+        .category-header h3 {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1rem;
+            color: var(--dark);
+        }
+
+        .category.active .category-content {
+            max-height: 1000px;
+            padding: 10px 15px;
+        }
+
+        .category-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        
+        .subject-item {
+            padding: 10px 12px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid #e9ecef;
+            min-height: 44px;
+        }
+        
+        .subject-item:active {
+            background: #f8f9fa;
+            transform: translateX(3px);
+        }
+        
+        .subject-item.selected {
+            background: rgba(67, 97, 238, 0.1);
+            border-left: 3px solid var(--primary);
+        }
+        
+        .subject-item.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .subject-checkbox {
+            margin-left: 8px;
+            transform: scale(1.1);
+        }
+        
+        .sales-stats {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            flex: 1;
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 10px 0;
+            color: var(--primary);
+        }
+        
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        
+        .reset-btn {
+            margin-top: 10px;
+            padding: 8px 15px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+        
+        .bottom-nav {
+            display: flex;
+            background: white;
+            box-shadow: 0 -3px 10px rgba(0, 0, 0, 0.1);
+            padding: 0;
+            position: sticky;
+            bottom: 0;
+            z-index: 100;
+        }
+        
+        .nav-item {
+            flex: 1;
+            text-align: center;
+            padding: 12px 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-top: 3px solid transparent;
+            min-height: 60px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .nav-item.active {
+            border-top: 3px solid var(--primary);
+            background: rgba(67, 97, 238, 0.05);
+        }
+        
+        .nav-item i {
+            font-size: 1.3rem;
+            margin-bottom: 3px;
+            color: #6c757d;
+        }
+        
+        .nav-item.active i {
+            color: var(--primary);
+        }
+        
+        .nav-item span {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #6c757d;
+        }
+        
+        .nav-item.active span {
+            color: var(--primary);
+        }
+        
+        .file-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 8px;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .file-list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            border-bottom: 1px solid #e9ecef;
+            min-height: 44px;
+        }
+        
+        .file-list-item:last-child {
+            border-bottom: none;
+        }
+        
+        .telegram-section {
+            margin-top: 20px;
+            padding: 20px;
+            background: linear-gradient(135deg, #0088cc 0%, #00aced 100%);
+            color: white;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .telegram-section h3 {
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 1.1rem;
+        }
+        
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 15px;
+        }
+        
+        .subject-count {
+            display: inline-block;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            text-align: center;
+            line-height: 20px;
+            font-size: 0.8rem;
+            margin-right: 5px;
+        }
+        
+        .download-section {
+            margin-top: 20px;
+            padding: 20px;
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .success-message {
+            background: #d1edff;
+            color: #155724;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+            border: 1px solid #c3e6cb;
+        }
+        
+        @media (max-width: 768px) {
+            .sales-stats {
+                flex-direction: column;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i class="fas fa-stamp"></i>
+                <div class="logo-text">
+                    <h1>نظام ختم ملفات PDF</h1>
+                    <p>أضف ختم رقم الزبون إلى ملفات PDF بسهولة</p>
+                </div>
+            </div>
+        </header>
+        
+        <div class="main-content">
+            <!-- قسم المبيعات -->
+            <div id="sales-section" class="section">
+                <h2 class="section-title">
+                    <i class="fas fa-chart-line"></i>
+                    إحصائيات المبيعات
+                </h2>
+                
+                <div class="sales-stats">
+                    <div class="stat-card">
+                        <i class="fas fa-shopping-cart"></i>
+                        <div class="stat-value" id="today-sales">0</div>
+                        <div class="stat-label">مبيعات اليوم</div>
+                        <button class="reset-btn" id="reset-today">
+                            <i class="fas fa-redo"></i> تصفير
+                        </button>
+                    </div>
+                    
+                    <div class="stat-card">
+    <i class="fas fa-chart-bar"></i>
+    <div class="stat-value" id="total-sales">0</div>
+    <div class="stat-label">المجموع الكلي</div>
+    <button class="reset-btn" id="reset-total">
+        <i class="fas fa-redo"></i> تصفير الكلي
+    </button>
+</div>
+                </div>
+            </div>
+            
+            <!-- قسم البيع الرئيسي -->
+            <div id="main-section" class="section active">
+                <h2 class="section-title">
+                    <i class="fas fa-stamp"></i>
+                    ختم الملفات
+                </h2>
+                
+                <div class="card">
+                    <div class="form-group">
+                        <label>اختر المواد المطلوبة <span id="selected-count" class="subject-count">0</span></label>
+                        <div class="category active">
+                            <div class="category-header">
+                                <h3><i class="fas fa-flask"></i> السادس العلمي</h3>
+                                <i class="fas fa-chevron-down"></i>
+                            </div>
+                            <div class="category-content" id="science-subjects">
+                                <!-- سيتم تعبئة المواد من قاعدة البيانات -->
+                            </div>
+                        </div>
+                        
+                        <div class="category">
+                            <div class="category-header">
+                                <h3><i class="fas fa-book"></i> السادس الأدبي</h3>
+                                <i class="fas fa-chevron-down"></i>
+                            </div>
+                            <div class="category-content" id="literary-subjects">
+                                <!-- سيتم تعبئة المواد من قاعدة البيانات -->
+                            </div>
+                        </div>
+                        
+                        <div class="category">
+                            <div class="category-header">
+                                <h3><i class="fas fa-graduation-cap"></i> الثالث متوسط</h3>
+                                <i class="fas fa-chevron-down"></i>
+                            </div>
+                            <div class="category-content" id="middle-subjects">
+                                <!-- سيتم تعبئة المواد من قاعدة البيانات -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button id="start-stamp" class="btn btn-secondary">
+                            <i class="fas fa-stamp"></i>
+                            بدء الختم
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="stamping-section" class="hidden">
+                    <div class="status-area">
+                        <div class="status-title">
+                            <i class="fas fa-sync-alt fa-spin"></i>
+                            حالة المعالجة
+                        </div>
+                        <div class="status-message" id="status-message">
+                            جاري بدء عملية الختم...
+                        </div>
+                        <div class="progress-container">
+                            <div class="progress-info">
+                                <span>تقدم المعالجة</span>
+                                <span id="progress-percent">0%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress" id="progress-bar"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="download-section" class="download-section hidden">
+                    <h3>
+                        <i class="fas fa-download"></i>
+                        تم ختم الملفات بنجاح!
+                    </h3>
+                    <p>يمكنك الآن تحميل الملفات المختومة</p>
+                    <div class="action-buttons">
+                        <button id="download-all" class="btn btn-primary">
+                            <i class="fas fa-download"></i>
+                            تحميل جميع الملفات
+                        </button>
+                        <button id="open-telegram" class="btn btn-telegram">
+                            <i class="fab fa-telegram"></i>
+                            إرسال مباشر إلى تيليجرام
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- قسم إضافة الملفات -->
+            <div id="add-files-section" class="section">
+                <h2 class="section-title">
+                    <i class="fas fa-folder-plus"></i>
+                    إضافة الملفات الأصلية
+                </h2>
+                
+                <div class="card">
+                    <div class="file-upload-area" id="upload-area">
+                        <i class="fas fa-file-pdf"></i>
+                        <h3>اسحب وأفلت ملفات PDF هنا</h3>
+                        <p>أو انقر لاختيار الملفات</p>
+                        <input type="file" id="file-input" accept=".pdf" style="display: none;" multiple>
+                    </div>
+                    
+                    <div id="file-info-section" class="hidden">
+                        <div class="form-group">
+                            <label for="file-category">القسم</label>
+                            <select id="file-category">
+                                <option value="">-- اختر القسم --</option>
+                                <option value="science">السادس العلمي</option>
+                                <option value="literary">السادس الأدبي</option>
+                                <option value="middle">الثالث متوسط</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="file-subject">المادة</label>
+                            <select id="file-subject">
+                                <option value="">-- اختر المادة --</option>
+                                <!-- سيتم ملء هذا بناءً على القسم المختار -->
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="file-name">اسم الملف</label>
+                            <input type="text" id="file-name" placeholder="أدخل اسم للملف">
+                        </div>
+                        
+                        <div class="action-buttons">
+                            <button id="add-file" class="btn btn-secondary">
+                                <i class="fas fa-plus-circle"></i>
+                                إضافة الملف
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3 class="section-title">
+                        <i class="fas fa-list"></i>
+                        الملفات المضافة
+                    </h3>
+                    
+                    <div class="file-list" id="file-list">
+                        <!-- سيتم عرض الملفات المضافة هنا -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- التنقل السفلي -->
+        <div class="bottom-nav">
+            <div class="nav-item" data-target="sales-section">
+                <i class="fas fa-chart-line"></i>
+                <span>مبيعات اليوم</span>
+            </div>
+            <div class="nav-item active" data-target="main-section">
+                <i class="fas fa-stamp"></i>
+                <span>الرئيسية</span>
+            </div>
+            <div class="nav-item" data-target="add-files-section">
+                <i class="fas fa-folder-plus"></i>
+                <span>إضافة الملفات</span>
+            </div>
+        </div>
+        
+        <!-- نافذة إدخال رقم الزبون -->
+        <div id="customer-modal" class="modal-overlay hidden">
+            <div class="card" style="max-width: 400px; width: 100%;">
+                <h3 class="section-title">
+                    <i class="fas fa-user"></i>
+                    إدخال رقم الزبون
+                </h3>
+                <div class="form-group">
+                    <label for="customer-id-input">الرقم الذي ترغب في ختمه</label>
+                    <input type="text" id="customer-id-input" placeholder="أدخل رقم الزبون" maxlength="20">
+                </div>
+                <div class="action-buttons">
+                    <button id="confirm-stamp" class="btn btn-primary">
+                        <i class="fas fa-stamp"></i>
+                        بدء الختم
+                    </button>
+                    <button id="cancel-stamp" class="btn btn-accent">
+                        <i class="fas fa-times"></i>
+                        إلغاء
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // بيانات التطبيق
+        let originalFiles = [];
+        let todaySales = 0;
+        let totalSales = 0;
+        let stampedFiles = [];
+        const FILE_PRICE = 10000;
+        const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB حد أقصى
+
+        // الأقسام والمواد الثابتة
+        const fileCategories = {
+            science: ["إسلامية", "عربي", "انكليزي", "أحياء", "رياضيات", "كيمياء", "فيزياء"],
+            literary: ["إسلامية", "عربي", "انكليزي", "رياضيات", "اقتصاد", "تاريخ", "جغرافية"],
+            middle: ["إسلامية", "عربي", "انكليزي", "رياضيات", "أحياء", "كيمياء", "فيزياء", "اجتماعيات"]
+        };
+
+        // فتح قاعدة بيانات IndexedDB محسنة
+        function openDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('PDFStampingDB', 2);
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    
+                    // إنشاء مخزن للملفات
+                    if (!db.objectStoreNames.contains('files')) {
+                        const store = db.createObjectStore('files', { keyPath: 'id' });
+                        store.createIndex('category', 'category', { unique: false });
+                        store.createIndex('subject', 'subject', { unique: false });
+                    }
+                    
+                    // إنشاء مخزن للمبيعات
+                    if (!db.objectStoreNames.contains('sales')) {
+                        db.createObjectStore('sales', { keyPath: 'id' });
+                    }
+                    
+                    // إنشاء مخزن للملفات الكبيرة بشكل منفصل
+                    if (!db.objectStoreNames.contains('fileContents')) {
+                        db.createObjectStore('fileContents', { keyPath: 'fileId' });
+                    }
+                };
+            });
+        }
+
+        // حفظ الملفات في IndexedDB مع فصل المحتوى
+        async function saveFilesToDB(files) {
+            try {
+                const db = await openDB();
+                const transaction = db.transaction(['files', 'fileContents'], 'readwrite');
+                const filesStore = transaction.objectStore('files');
+                const contentsStore = transaction.objectStore('fileContents');
+
+                // مسح كل الملفات القديمة أولاً
+                await clearStore(filesStore);
+                await clearStore(contentsStore);
+
+                // حفظ الملفات والمحتوى بشكل منفصل
+                for (const file of files) {
+                    // حفظ بيانات الملف الأساسية
+                    const fileData = {
+                        id: file.id,
+                        name: file.name,
+                        category: file.category,
+                        subject: file.subject,
+                        uploadDate: file.uploadDate,
+                        fileSize: file.fileSize
+                    };
+                    filesStore.put(fileData);
+
+                    // حفظ محتوى الملف بشكل منفصل
+                    if (file.fileContent) {
+                        const contentData = {
+                            fileId: file.id,
+                            content: file.fileContent
+                        };
+                        contentsStore.put(contentData);
+                    }
+                }
+
+                return new Promise((resolve, reject) => {
+                    transaction.oncomplete = () => resolve();
+                    transaction.onerror = () => reject(transaction.error);
+                });
+            } catch (error) {
+                console.error('Error saving files to DB:', error);
+                throw error;
+            }
+        }
+
+        // مسح مخزن كامل
+        function clearStore(store) {
+            return new Promise((resolve, reject) => {
+                const request = store.clear();
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // جلب الملفات من IndexedDB مع المحتوى - محسنة
+async function getFilesFromDB() {
+    try {
+        const db = await openDB();
+        const transaction = db.transaction(['files', 'fileContents'], 'readonly');
+        const filesStore = transaction.objectStore('files');
+        const contentsStore = transaction.objectStore('fileContents');
+        
+        const filesRequest = filesStore.getAll();
+        
+        return new Promise((resolve, reject) => {
+            filesRequest.onsuccess = async () => {
+                const files = filesRequest.result;
+                const filesWithContent = [];
+                
+                // جلب محتوى كل ملف باستخدام Promise.all لأفضل أداء
+                const contentPromises = files.map(file => {
+                    return new Promise((resolveContent) => {
+                        const contentRequest = contentsStore.get(file.id);
+                        contentRequest.onsuccess = () => {
+                            if (contentRequest.result) {
+                                file.fileContent = contentRequest.result.content;
+                            }
+                            filesWithContent.push(file);
+                            resolveContent();
+                        };
+                        contentRequest.onerror = () => {
+                            console.warn(`Could not load content for file ${file.id}`);
+                            filesWithContent.push(file);
+                            resolveContent();
+                        };
+                    });
+                });
+                
+                // انتظار اكتمال جلب كل المحتويات
+                Promise.all(contentPromises).then(() => {
+                    resolve(filesWithContent);
+                });
+            };
+            
+            filesRequest.onerror = () => reject(filesRequest.error);
+        });
+    } catch (error) {
+        console.error('Error getting files from DB:', error);
+        return [];
+    }
+}
+
+        // حفظ المبيعات في localStorage
+        function saveSales() {
+            try {
+                localStorage.setItem('todaySales', todaySales.toString());
+                localStorage.setItem('totalSales', totalSales.toString());
+            } catch (error) {
+                console.warn('Could not save sales to localStorage:', error);
+                // استخدم IndexedDB كبديل إذا فشل localStorage
+                saveSalesToDB();
+            }
+        }
+
+        // حفظ المبيعات في IndexedDB
+        async function saveSalesToDB() {
+            try {
+                const db = await openDB();
+                const transaction = db.transaction(['sales'], 'readwrite');
+                const store = transaction.objectStore('sales');
+                
+                store.put({ id: 'today', value: todaySales });
+                store.put({ id: 'total', value: totalSales });
+            } catch (error) {
+                console.error('Error saving sales to DB:', error);
+            }
+        }
+
+        // جلب المبيعات من IndexedDB
+        async function getSalesFromDB() {
+            try {
+                const db = await openDB();
+                const transaction = db.transaction(['sales'], 'readonly');
+                const store = transaction.objectStore('sales');
+                
+                const todayRequest = store.get('today');
+                const totalRequest = store.get('total');
+                
+                return new Promise((resolve, reject) => {
+                    transaction.oncomplete = () => {
+                        resolve({
+                            today: todayRequest.result?.value || 0,
+                            total: totalRequest.result?.value || 0
+                        });
+                    };
+                    transaction.onerror = () => reject(transaction.error);
+                });
+            } catch (error) {
+                console.error('Error getting sales from DB:', error);
+                return { today: 0, total: 0 };
+            }
+        }
+        
+        // عناصر DOM
+        const navItems = document.querySelectorAll('.nav-item');
+        const sections = document.querySelectorAll('.section');
+        const todaySalesEl = document.getElementById('today-sales');
+        const totalSalesEl = document.getElementById('total-sales');
+        const resetTodayBtn = document.getElementById('reset-today');
+        const selectedCountEl = document.getElementById('selected-count');
+        
+        const categories = document.querySelectorAll('.category');
+        const startStampBtn = document.getElementById('start-stamp');
+        const stampingSection = document.getElementById('stamping-section');
+        const statusMessage = document.getElementById('status-message');
+        const progressBar = document.getElementById('progress-bar');
+        const progressPercent = document.getElementById('progress-percent');
+        const downloadSection = document.getElementById('download-section');
+        const downloadAllBtn = document.getElementById('download-all');
+        const openTelegramBtn = document.getElementById('open-telegram');
+        
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const fileInfoSection = document.getElementById('file-info-section');
+        const fileCategorySelect = document.getElementById('file-category');
+        const fileSubjectSelect = document.getElementById('file-subject');
+        const fileNameInput = document.getElementById('file-name');
+        const addFileBtn = document.getElementById('add-file');
+        const fileListEl = document.getElementById('file-list');
+        
+        const customerModal = document.getElementById('customer-modal');
+        const customerIdInput = document.getElementById('customer-id-input');
+        const confirmStampBtn = document.getElementById('confirm-stamp');
+        const cancelStampBtn = document.getElementById('cancel-stamp');
+
+        // التنقل بين الأقسام
+        navItems.forEach(item => {
+            item.addEventListener('click', function() {
+                const target = this.getAttribute('data-target');
+                
+                navItems.forEach(nav => nav.classList.remove('active'));
+                sections.forEach(section => section.classList.remove('active'));
+                
+                this.classList.add('active');
+                document.getElementById(target).classList.add('active');
+                
+                // تحديث قائمة الملفات عند الذهاب لقسم إضافة الملفات
+                if (target === 'add-files-section') {
+                    updateFileList();
+                }
+            });
+        });
+        
+        // فتح/إغلاق الأقسام - محسنة
+        categories.forEach(category => {
+            const header = category.querySelector('.category-header');
+            const content = category.querySelector('.category-content');
+            const icon = header.querySelector('.fa-chevron-down');
+            
+            header.addEventListener('click', function() {
+                const isActive = category.classList.contains('active');
+                
+                // إغلاق جميع الأقسام أولاً
+                categories.forEach(cat => {
+                    cat.classList.remove('active');
+                    cat.querySelector('.fa-chevron-down').classList.remove('fa-rotate-180');
+                });
+                
+                // فتح القسم الحالي إذا لم يكن مفتوحاً
+                if (!isActive) {
+                    category.classList.add('active');
+                    icon.classList.add('fa-rotate-180');
+                }
+            });
+        });
+        
+        // تحديث المواد بناءً على القسم المختار
+        fileCategorySelect.addEventListener('change', function() {
+            const category = this.value;
+            fileSubjectSelect.innerHTML = '<option value="">-- اختر المادة --</option>';
+            
+            if (category && fileCategories[category]) {
+                fileCategories[category].forEach(subject => {
+                    const option = document.createElement('option');
+                    option.value = subject;
+                    option.textContent = subject;
+                    fileSubjectSelect.appendChild(option);
+                });
+            }
+        });
+        
+        // رفع الملفات - سحب وإفلات محسن
+        uploadArea.addEventListener('click', function() {
+            fileInput.click();
+        });
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#4361ee';
+            uploadArea.style.background = 'rgba(67, 97, 238, 0.05)';
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.borderColor = '#dee2e6';
+            uploadArea.style.background = 'white';
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#dee2e6';
+            uploadArea.style.background = 'white';
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileUpload(files[0]);
+            }
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileUpload(e.target.files[0]);
+            }
+        });
+        
+        function handleFileUpload(file) {
+            if (!file) {
+                showError('يرجى اختيار ملف!');
+                return;
+            }
+            
+            if (file.type !== 'application/pdf') {
+                showError('يرجى اختيار ملف PDF فقط!');
+                return;
+            }
+            
+            if (file.size > MAX_FILE_SIZE) {
+                showError(`حجم الملف كبير جداً! الحد الأقصى هو ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+                return;
+            }
+            
+            // إظهار قسم معلومات الملف
+            fileInfoSection.classList.remove('hidden');
+            
+            // تعبئة اسم الملف الافتراضي
+            fileNameInput.value = file.name.replace('.pdf', '');
+        }
+        
+        // إضافة ملف نظيف - محسنة
+        addFileBtn.addEventListener('click', async function() {
+            const category = fileCategorySelect.value;
+            const subject = fileSubjectSelect.value;
+            const fileName = fileNameInput.value.trim();
+            const file = fileInput.files[0];
+            
+            if (!category || !subject || !fileName) {
+                showError('يرجى ملء جميع الحقول!');
+                return;
+            }
+            
+            if (!file) {
+                showError('يرجى اختيار ملف أولاً!');
+                return;
+            }
+            
+            // التحقق من عدم تكرار الملف
+            const existingFile = originalFiles.find(f => 
+                f.category === category && f.subject === subject
+            );
+            
+            if (existingFile) {
+                if (!confirm('يوجد ملف لهذه المادة مسبقاً. هل تريد استبداله؟')) {
+                    return;
+                }
+                // حذف الملف القديم
+                originalFiles = originalFiles.filter(f => !(f.category === category && f.subject === subject));
+            }
+            
+            // إظهار تحميل
+            addFileBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الإضافة...';
+            addFileBtn.disabled = true;
+            
+            try {
+                // قراءة الملف كمصفوفة بايتات بدلاً من base64
+                const arrayBuffer = await readFileAsArrayBuffer(file);
+                
+                // إنشاء كائن الملف النظيف
+                const fileData = {
+                    id: Date.now() + Math.random(),
+                    name: fileName,
+                    category: category,
+                    subject: subject,
+                    uploadDate: new Date().toLocaleDateString('ar-EG'),
+                    fileSize: formatFileSize(file.size),
+                    fileContent: arrayBuffer // حفظ كمصفوفة بايتات
+                };
+                
+                // إضافة الملف للقائمة
+                originalFiles.push(fileData);
+                
+                // حفظ البيانات في IndexedDB
+                await saveFilesToDB(originalFiles);
+                updateFileList();
+                updateSubjectsList();
+                
+                showSuccess('تم إضافة الملف النظيف بنجاح!');
+                
+                // إعادة تعيين الحقول
+                fileInfoSection.classList.add('hidden');
+                fileCategorySelect.value = '';
+                fileSubjectSelect.innerHTML = '<option value="">-- اختر المادة --</option>';
+                fileNameInput.value = '';
+                fileInput.value = '';
+                
+            } catch (error) {
+                console.error('Error adding file:', error);
+                showError('خطأ في إضافة الملف! يرجى المحاولة مرة أخرى.');
+            } finally {
+                // إعادة تعيين الزر
+                addFileBtn.innerHTML = '<i class="fas fa-plus-circle"></i> إضافة الملف';
+                addFileBtn.disabled = false;
+            }
+        });
+        
+        // قراءة الملف كمصفوفة بايتات
+        function readFileAsArrayBuffer(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = (e) => reject(new Error('فشل في قراءة الملف'));
+                reader.readAsArrayBuffer(file);
+            });
+        }
+        
+        // تنسيق حجم الملف
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // تحديث قائمة الملفات
+        function updateFileList() {
+            fileListEl.innerHTML = '';
+            
+            if (originalFiles.length === 0) {
+                fileListEl.innerHTML = '<p style="text-align: center; color: #6c757d; padding: 20px;">لا توجد ملفات مضافة بعد</p>';
+                return;
+            }
+            
+            originalFiles.forEach(file => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-list-item';
+                fileItem.innerHTML = `
+                    <div>
+                        <div class="file-name">${file.name}.pdf</div>
+                        <div style="color: #6c757d; font-size: 0.9rem;">${file.subject} - ${getCategoryName(file.category)} - ${file.fileSize}</div>
+                    </div>
+                    <div class="file-actions">
+                        <button class="delete-btn" data-id="${file.id}" style="background: var(--accent); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">
+                            <i class="fas fa-trash"></i> حذف
+                        </button>
+                    </div>
+                `;
+                fileListEl.appendChild(fileItem);
+            });
+            
+            // إضافة أحداث لأزرار الحذف
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const fileId = this.getAttribute('data-id');
+                    deleteFile(fileId);
+                });
+            });
+        }
+        
+        // الحصول على اسم القسم
+        function getCategoryName(category) {
+            const names = {
+                science: 'السادس العلمي',
+                literary: 'السادس الأدبي', 
+                middle: 'الثالث متوسط'
+            };
+            return names[category] || category;
+        }
+        
+        // حذف ملف
+        async function deleteFile(fileId) {
+            if (confirm('هل أنت متأكد من حذف هذا الملف؟')) {
+                originalFiles = originalFiles.filter(f => f.id != fileId);
+                await saveFilesToDB(originalFiles);
+                updateFileList();
+                updateSubjectsList();
+                showSuccess('تم حذف الملف بنجاح!');
+            }
+        }
+        
+        // تحديث قائمة المواد بناءً على الملفات النظيفة المتاحة
+        function updateSubjectsList() {
+            const scienceContainer = document.getElementById('science-subjects');
+            const literaryContainer = document.getElementById('literary-subjects');
+            const middleContainer = document.getElementById('middle-subjects');
+            
+            scienceContainer.innerHTML = '';
+            literaryContainer.innerHTML = '';
+            middleContainer.innerHTML = '';
+            
+            // تجميع المواد المتاحة لكل قسم من الملفات النظيفة
+            const scienceFiles = originalFiles.filter(f => f.category === 'science');
+            const literaryFiles = originalFiles.filter(f => f.category === 'literary');
+            const middleFiles = originalFiles.filter(f => f.category === 'middle');
+            
+            // إضافة المواد للقسم العلمي
+            fileCategories.science.forEach(subject => {
+                const hasFile = scienceFiles.some(f => f.subject === subject);
+                addSubjectItem(scienceContainer, subject, hasFile, 'science');
+            });
+            
+            // إضافة المواد للقسم الأدبي
+            fileCategories.literary.forEach(subject => {
+                const hasFile = literaryFiles.some(f => f.subject === subject);
+                addSubjectItem(literaryContainer, subject, hasFile, 'literary');
+            });
+            
+            // إضافة المواد للثالث متوسط
+            fileCategories.middle.forEach(subject => {
+                const hasFile = middleFiles.some(f => f.subject === subject);
+                addSubjectItem(middleContainer, subject, hasFile, 'middle');
+            });
+            
+            updateSelectedCount();
+        }
+        
+        // إضافة عنصر مادة
+        function addSubjectItem(container, subject, hasFile, category) {
+            const subjectItem = document.createElement('div');
+            subjectItem.className = `subject-item ${hasFile ? '' : 'disabled'}`;
+            subjectItem.innerHTML = `
+                <input type="checkbox" class="subject-checkbox" id="${category}-${subject}" 
+                       data-file="${subject}.pdf" data-category="${category}" 
+                       ${hasFile ? '' : 'disabled'}>
+                <label for="${category}-${subject}">${subject} ${hasFile ? '' : '(غير متوفر)'}</label>
+            `;
+            container.appendChild(subjectItem);
+            
+            // إضافة حدث التحديد
+            const checkbox = subjectItem.querySelector('.subject-checkbox');
+            if (hasFile) {
+                checkbox.addEventListener('change', function() {
+                    if (this.checked) {
+                        this.closest('.subject-item').classList.add('selected');
+                    } else {
+                        this.closest('.subject-item').classList.remove('selected');
+                    }
+                    updateSelectedCount();
+                });
+            }
+        }
+        
+        // تحديث عدد المواد المحددة
+        function updateSelectedCount() {
+            const selectedCount = document.querySelectorAll('.subject-checkbox:checked').length;
+            selectedCountEl.textContent = selectedCount;
+        }
+        
+        // تصفير مبيعات اليوم
+        resetTodayBtn.addEventListener('click', function() {
+            if (todaySales > 0) {
+                if (confirm('هل أنت متأكد من تصفير مبيعات اليوم؟')) {
+                    todaySales = 0;
+                    updateSalesDisplay();
+                    saveSales();
+                    showSuccess('تم تصفير مبيعات اليوم!');
+                }
+            } else {
+                showError('لا توجد مبيعات لليوم!');
+            }
+        });
+        
+        // تحديث عرض المبيعات
+        function updateSalesDisplay() {
+            todaySalesEl.textContent = todaySales.toLocaleString();
+            totalSalesEl.textContent = totalSales.toLocaleString();
+        }
+        
+        // بدء عملية الختم
+        startStampBtn.addEventListener('click', function() {
+            const selectedFiles = getSelectedFiles();
+            
+            if (selectedFiles.length === 0) {
+                showError('يرجى اختيار ملف واحد على الأقل');
+                return;
+            }
+            
+            // إظهار نافذة إدخال رقم الزبون
+            customerModal.classList.remove('hidden');
+            customerIdInput.value = '';
+            customerIdInput.focus();
+        });
+        
+        // تأكيد الختم
+        confirmStampBtn.addEventListener('click', async function() {
+            const customerId = customerIdInput.value.trim();
+            
+            if (!customerId) {
+                showError('يرجى إدخال رقم الزبون!');
+                return;
+            }
+            
+            // التحقق من صحة رقم الزبون
+            if (!/^[0-9]+$/.test(customerId)) {
+                showError('يرجى إدخال رقم زبون صحيح (أرقام فقط)');
+                return;
+            }
+            
+            customerModal.classList.add('hidden');
+            
+            const selectedFiles = getSelectedFiles();
+            await startStampingProcess(selectedFiles, customerId);
+        });
+        
+        // إلغاء الختم
+        cancelStampBtn.addEventListener('click', function() {
+            customerModal.classList.add('hidden');
+        });
+        
+        // بدء عملية الختم
+        async function startStampingProcess(files, customerId) {
+            stampingSection.classList.remove('hidden');
+            downloadSection.classList.add('hidden');
+            updateStatus('جاري بدء عملية الختم...', 'info');
+            updateProgress(0);
+            
+            try {
+                stampedFiles = await stampFiles(files, customerId);
+                
+                // إظهار قسم التحميل
+                downloadSection.classList.remove('hidden');
+                updateStatus('تم ختم جميع الملفات بنجاح!', 'success');
+                
+            } catch (error) {
+                console.error('Stamping error:', error);
+                updateStatus(`حدث خطأ أثناء الختم: ${error.message}`, 'error');
+                showError(`فشل في عملية الختم: ${error.message}`);
+            }
+        }
+        
+        // تحميل جميع الملفات
+        downloadAllBtn.addEventListener('click', function() {
+            downloadStampedFiles();
+        });
+        
+        // فتح التليجرام
+        openTelegramBtn.addEventListener('click', function() {
+            openTelegramWithFiles(stampedFiles);
+        });
+        
+        // الحصول على الملفات المحددة
+        function getSelectedFiles() {
+            const selected = [];
+            document.querySelectorAll('.subject-checkbox:checked').forEach(checkbox => {
+                const subjectName = checkbox.nextElementSibling.textContent.replace(' (غير متوفر)', '').trim();
+                const category = checkbox.dataset.category;
+                
+                // البحث عن الملف المناسب
+                const fileData = originalFiles.find(f => 
+                    f.subject === subjectName && f.category === category
+                );
+                
+                if (fileData) {
+                    selected.push(fileData);
+                }
+            });
+            return selected;
+        }
+        
+        // تحديث حالة المعالجة
+        function updateStatus(message, type = 'info') {
+            let icon = 'ℹ️';
+            let color = '#3498db';
+            
+            if (type === 'error') {
+                icon = '❌';
+                color = '#e74c3c';
+            } else if (type === 'success') {
+                icon = '✅';
+                color = '#2ecc71';
+            }
+            
+            statusMessage.innerHTML = `${icon} ${message}`;
+            statusMessage.style.borderLeft = `3px solid ${color}`;
+        }
+        
+        // تحديث شريط التقدم
+        function updateProgress(percent) {
+            progressBar.style.width = `${percent}%`;
+            progressPercent.textContent = `${Math.round(percent)}%`;
+        }
+        
+        // عملية الختم الحقيقية
+        async function stampFiles(files, customerId) {
+            const totalFiles = files.length;
+            const stamped = [];
+            
+            for (let i = 0; i < totalFiles; i++) {
+                const currentFile = files[i];
+                updateStatus(`جاري ختم ملف: ${currentFile.subject} (${i+1}/${totalFiles})<br>رقم الزبون: ${customerId}`, 'info');
+                updateProgress(((i) / totalFiles) * 100);
+                
+                try {
+                    // إنشاء ملف مختوم مع ختم حقيقي
+                    const stampedFile = await createStampedPDF(currentFile, customerId);
+                    stamped.push(stampedFile);
+                    
+                    updateProgress(((i + 1) / totalFiles) * 100);
+                    
+                    // تأخير بسيط للسماح بتحديث الواجهة
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                } catch (error) {
+                    console.error('Error stamping file:', error);
+                    throw new Error(`فشل في ختم ملف ${currentFile.subject}: ${error.message}`);
+                }
+            }
+            
+            // تحديث المبيعات
+            const totalAmount = files.length * FILE_PRICE;
+            todaySales += totalAmount;
+            totalSales += totalAmount;
+            updateSalesDisplay();
+            saveSales();
+            
+            return stamped;
+        }
+        
+        // إنشاء PDF مختوم - محسنة
+        async function createStampedPDF(file, customerId) {
+            try {
+                console.log('بدء ختم الملف:', file.name);
+                
+                if (!file.fileContent) {
+                    throw new Error('محتوى الملف غير موجود!');
+                }
+                
+                const { PDFDocument, rgb } = PDFLib;
+                
+                // استخدام ArrayBuffer مباشرة
+                const pdfBytes = new Uint8Array(file.fileContent);
+                const pdfDoc = await PDFDocument.load(pdfBytes);
+                const pages = pdfDoc.getPages();
+                
+                console.log(`عدد الصفحات في الملف: ${pages.length}`);
+                
+                // تحديد الصفحات التي نريد الختم عليها
+                const pagesToStamp = [];
+                
+                // الصفحة 2 (الثانية) - index 1
+                if (pages.length > 1) pagesToStamp.push(1);
+                
+                // الصفحة 3 (الثالثة) - index 2  
+                if (pages.length > 2) pagesToStamp.push(2);
+                
+                // الصفحة قبل الأخيرة
+                if (pages.length > 1) pagesToStamp.push(pages.length - 2);
+                
+                // الصفحة الأخيرة
+                if (pages.length > 0) pagesToStamp.push(pages.length - 1);
+                
+                console.log('الصفحات التي سيتم ختمها:', pagesToStamp.map(p => p + 1));
+                
+                // إضافة الرقم على الصفحات المحددة فقط
+                pagesToStamp.forEach(pageIndex => {
+                    const page = pages[pageIndex];
+                    const { width, height } = page.getSize();
+                    
+                    // إضافة الرقم فقط - لون رمادي وحجم 12
+                    page.drawText(`${customerId}`, {
+                        x: width - 100, // الزاوية اليمنى
+                        y: height - 40, // أعلى الصفحة
+                        size: 12, // حجم 12
+                        color: rgb(0.5, 0.5, 0.5), // لون رمادي
+                        opacity: 0.8
+                    });
+                    
+                    console.log(`تم ختم الصفحة ${pageIndex + 1}`);
+                });
+                
+                const stampedPdfBytes = await pdfDoc.save();
+                const stampedBlob = new Blob([stampedPdfBytes], { type: 'application/pdf' });
+                const stampedUrl = URL.createObjectURL(stampedBlob);
+                
+                console.log('تم ختم الصفحات المحددة بنجاح!');
+                
+                // اسم ملف ثابت: مرشحات + اسم المادة فقط
+                const cleanFileName = `مرشحات_${file.subject}.pdf`;
+                
+                return {
+                    name: cleanFileName,
+                    subject: file.subject,
+                    customerId: customerId,
+                    timestamp: new Date().toLocaleString('ar-EG'),
+                    downloadUrl: stampedUrl,
+                    blob: stampedBlob,
+                    pageCount: pages.length,
+                    stampedPages: pagesToStamp.map(p => p + 1)
+                };
+                
+            } catch (error) {
+                console.error('Error creating stamped PDF:', error);
+                throw new Error('فشل في معالجة ملف PDF: ' + error.message);
+            }
+        }
+        
+        // تحميل الملفات المختومة - كل ملف منفصل
+        function downloadStampedFiles() {
+            if (stampedFiles.length === 0) {
+                showError('لا توجد ملفات مختومة للتحميل');
+                return;
+            }
+            
+            // تحميل كل ملف على حدة
+            stampedFiles.forEach((file, index) => {
+                setTimeout(() => {
+                    const link = document.createElement('a');
+                    link.href = file.downloadUrl;
+                    link.download = file.name;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    
+                    // تحرير الذاكرة بعد التحميل
+                    setTimeout(() => URL.revokeObjectURL(file.downloadUrl), 1000);
+                }, index * 1000); // تأخير ثانية بين كل ملف
+            });
+            
+            showSuccess(`سيبدأ تحميل ${stampedFiles.length} ملف...`);
+        }
+        
+        // إرسال مباشر عبر بوت تيليجرام - محسنة
+        async function openTelegramWithFiles(files) {
+            if (files.length === 0) {
+                showError('لا توجد ملفات مختومة للإرسال');
+                return;
+            }
+
+            // إخفاء التوكن الحساس - استخدم متغيرات البيئة في التطبيق الحقيقي
+            const BOT_TOKEN = '8412491014:AAGdDQUzyr76zAOh-zBFcC0Ckydo4cXhW5w';
+            const CHAT_ID = '7627801499';
+            
+            updateStatus('جاري إرسال الملفات إلى تيليجرام...', 'info');
+            openTelegramBtn.disabled = true;
+            openTelegramBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الإرسال...';
+
+            try {
+                let successCount = 0;
+                let errorCount = 0;
+
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    updateStatus(`جاري إرسال الملف: ${file.subject} (${i+1}/${files.length})`, 'info');
+
+                    try {
+                        // تحويل الـ Blob إلى File
+                        const pdfFile = new File([file.blob], file.name, { type: 'application/pdf' });
+
+                        // إنشاء FormData للإرسال
+                        const formData = new FormData();
+                        formData.append('chat_id', CHAT_ID);
+                        formData.append('document', pdfFile);
+                        formData.append('caption', `📁 ${file.subject}\n📞 رقم الزبون: ${file.customerId}`);
+
+                        // إرسال الملف للبوت
+                        const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        const result = await response.json();
+
+                        if (result.ok) {
+                            successCount++;
+                            console.log(`تم إرسال ${file.name} بنجاح`);
+                            updateStatus(`✅ تم إرسال: ${file.subject} (${i+1}/${files.length})`, 'success');
+                        } else {
+                            errorCount++;
+                            console.error(`فشل إرسال ${file.name}:`, result);
+                            updateStatus(`❌ فشل إرسال: ${file.subject}`, 'error');
+                        }
+
+                        // انتظر قليلاً بين كل ملف
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        
+                    } catch (fileError) {
+                        errorCount++;
+                        console.error(`خطأ في إرسال ${file.name}:`, fileError);
+                        updateStatus(`❌ خطأ في: ${file.subject}`, 'error');
+                    }
+                }
+
+                const message = `تم إرسال ${successCount} ملف بنجاح${errorCount > 0 ? ` و فشل إرسال ${errorCount} ملف` : ''}`;
+                updateStatus(message, errorCount > 0 ? 'error' : 'success');
+                showSuccess(message);
+
+            } catch (error) {
+                console.error('خطأ في الإرسال:', error);
+                updateStatus(`❌ خطأ في الإرسال: ${error.message}`, 'error');
+                showError(`خطأ في الإرسال: ${error.message}`);
+            } finally {
+                openTelegramBtn.disabled = false;
+                openTelegramBtn.innerHTML = '<i class="fab fa-telegram"></i> إرسال مباشر إلى تيليجرام';
+            }
+        }
+        
+        // وظائف مساعدة للرسائل
+        function showError(message) {
+            alert(`❌ ${message}`);
+        }
+        
+        function showSuccess(message) {
+            alert(`✅ ${message}`);
+        }
+        
+        // التهيئة الأولية المحسنة
+        document.addEventListener('DOMContentLoaded', async function() {
+            // تحميل البيانات من مصادر متعددة
+            try {
+                // محاولة تحميل المبيعات من localStorage أولاً
+                todaySales = parseInt(localStorage.getItem('todaySales')) || 0;
+                totalSales = parseInt(localStorage.getItem('totalSales')) || 0;
+                
+                // إذا لم تكن موجودة في localStorage، جرب IndexedDB
+                if (todaySales === 0 && totalSales === 0) {
+                    const sales = await getSalesFromDB();
+                    todaySales = sales.today;
+                    totalSales = sales.total;
+                }
+            } catch (error) {
+                console.warn('Could not load sales data:', error);
+                todaySales = 0;
+                totalSales = 0;
+            }
+            
+            // تحميل الملفات من IndexedDB
+            try {
+                originalFiles = await getFilesFromDB();
+                console.log('Loaded files from DB:', originalFiles.length);
+            } catch (error) {
+                console.error('Error loading files:', error);
+                originalFiles = [];
+            }
+            
+            // تحديث الواجهة
+            updateSalesDisplay();
+            updateSubjectsList();
+            updateFileList();
+            
+            console.log('Application initialized successfully');
+        });
+
+        // منع التحديد النصي
+        document.addEventListener('selectstart', function(e) {
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>
