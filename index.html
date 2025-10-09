@@ -8,7 +8,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/downloadjs/1.4.8/download.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
     <style>
+        /* كل الـ CSS نفسه بدون تغيير */
         :root {
             --primary: #4361ee;
             --secondary: #3a0ca3;
@@ -822,6 +828,21 @@
     </div>
 
     <script>
+        // تهيئة Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyByZCncrOsQMSkPwP4VcETBgHpRylpZs8o",
+            authDomain: "files-b20e5.firebaseapp.com",
+            projectId: "files-b20e5",
+            storageBucket: "files-b20e5.firebasestorage.app",
+            messagingSenderId: "698607784801",
+            appId: "1:698607784801:web:a7d6d5e4d7ebef38a5eb20",
+            measurementId: "G-KJ67LFWC9G"
+        };
+
+        // Initialize Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
         // بيانات التطبيق
         let originalFiles = [];
         let todaySales = 0;
@@ -837,188 +858,125 @@
             middle: ["إسلامية", "عربي", "انكليزي", "رياضيات", "أحياء", "كيمياء", "فيزياء", "اجتماعيات"]
         };
 
-        // فتح قاعدة بيانات IndexedDB محسنة
-        function openDB() {
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open('PDFStampingDB', 2);
-                
-                request.onerror = () => reject(request.error);
-                request.onsuccess = () => resolve(request.result);
-                
-                request.onupgradeneeded = (event) => {
-                    const db = event.target.result;
-                    
-                    // إنشاء مخزن للملفات
-                    if (!db.objectStoreNames.contains('files')) {
-                        const store = db.createObjectStore('files', { keyPath: 'id' });
-                        store.createIndex('category', 'category', { unique: false });
-                        store.createIndex('subject', 'subject', { unique: false });
-                    }
-                    
-                    // إنشاء مخزن للمبيعات
-                    if (!db.objectStoreNames.contains('sales')) {
-                        db.createObjectStore('sales', { keyPath: 'id' });
-                    }
-                    
-                    // إنشاء مخزن للملفات الكبيرة بشكل منفصل
-                    if (!db.objectStoreNames.contains('fileContents')) {
-                        db.createObjectStore('fileContents', { keyPath: 'fileId' });
-                    }
-                };
-            });
-        }
+        // === وظائف Firebase Firestore ===
 
-        // حفظ الملفات في IndexedDB مع فصل المحتوى
-        async function saveFilesToDB(files) {
+        // حفظ الملفات في Firestore
+        async function saveFilesToFirestore(files) {
             try {
-                const db = await openDB();
-                const transaction = db.transaction(['files', 'fileContents'], 'readwrite');
-                const filesStore = transaction.objectStore('files');
-                const contentsStore = transaction.objectStore('fileContents');
-
-                // مسح كل الملفات القديمة أولاً
-                await clearStore(filesStore);
-                await clearStore(contentsStore);
-
-                // حفظ الملفات والمحتوى بشكل منفصل
-                for (const file of files) {
-                    // حفظ بيانات الملف الأساسية
-                    const fileData = {
-                        id: file.id,
-                        name: file.name,
-                        category: file.category,
-                        subject: file.subject,
-                        uploadDate: file.uploadDate,
-                        fileSize: file.fileSize
-                    };
-                    filesStore.put(fileData);
-
-                    // حفظ محتوى الملف بشكل منفصل
-                    if (file.fileContent) {
-                        const contentData = {
-                            fileId: file.id,
-                            content: file.fileContent
-                        };
-                        contentsStore.put(contentData);
-                    }
-                }
-
-                return new Promise((resolve, reject) => {
-                    transaction.oncomplete = () => resolve();
-                    transaction.onerror = () => reject(transaction.error);
+                // حفظ في localStorage كنسخة احتياطية
+                localStorage.setItem('pdfFiles_backup', JSON.stringify(files));
+                
+                // حفظ في Firestore
+                await db.collection('pdfFiles').doc('filesData').set({
+                    files: files,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
                 });
+                
+                console.log('تم حفظ الملفات في Firestore بنجاح');
+                return true;
             } catch (error) {
-                console.error('Error saving files to DB:', error);
-                throw error;
+                console.error('خطأ في حفظ الملفات في Firestore:', error);
+                // إذا فشل Firestore، استخدم localStorage
+                localStorage.setItem('pdfFiles', JSON.stringify(files));
+                return false;
             }
         }
 
-        // مسح مخزن كامل
-        function clearStore(store) {
-            return new Promise((resolve, reject) => {
-                const request = store.clear();
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
+        // جلب الملفات من Firestore
+        async function getFilesFromFirestore() {
+            try {
+                const doc = await db.collection('pdfFiles').doc('filesData').get();
+                
+                if (doc.exists) {
+                    const data = doc.data();
+                    console.log('تم جلب الملفات من Firestore بنجاح');
+                    return data.files || [];
+                } else {
+                    console.log('لا توجد ملفات في Firestore، جاري التحقق من localStorage');
+                    // إذا لم توجد في Firestore، جرب localStorage
+                    const backupFiles = localStorage.getItem('pdfFiles_backup');
+                    if (backupFiles) {
+                        return JSON.parse(backupFiles);
+                    }
+                    return [];
+                }
+            } catch (error) {
+                console.error('خطأ في جلب الملفات من Firestore:', error);
+                // إذا فشل Firestore، استخدم localStorage
+                const localFiles = localStorage.getItem('pdfFiles');
+                return localFiles ? JSON.parse(localFiles) : [];
+            }
         }
 
-        // جلب الملفات من IndexedDB مع المحتوى - محسنة
-async function getFilesFromDB() {
-    try {
-        const db = await openDB();
-        const transaction = db.transaction(['files', 'fileContents'], 'readonly');
-        const filesStore = transaction.objectStore('files');
-        const contentsStore = transaction.objectStore('fileContents');
-        
-        const filesRequest = filesStore.getAll();
-        
-        return new Promise((resolve, reject) => {
-            filesRequest.onsuccess = async () => {
-                const files = filesRequest.result;
-                const filesWithContent = [];
-                
-                // جلب محتوى كل ملف باستخدام Promise.all لأفضل أداء
-                const contentPromises = files.map(file => {
-                    return new Promise((resolveContent) => {
-                        const contentRequest = contentsStore.get(file.id);
-                        contentRequest.onsuccess = () => {
-                            if (contentRequest.result) {
-                                file.fileContent = contentRequest.result.content;
-                            }
-                            filesWithContent.push(file);
-                            resolveContent();
-                        };
-                        contentRequest.onerror = () => {
-                            console.warn(`Could not load content for file ${file.id}`);
-                            filesWithContent.push(file);
-                            resolveContent();
-                        };
-                    });
-                });
-                
-                // انتظار اكتمال جلب كل المحتويات
-                Promise.all(contentPromises).then(() => {
-                    resolve(filesWithContent);
-                });
-            };
-            
-            filesRequest.onerror = () => reject(filesRequest.error);
-        });
-    } catch (error) {
-        console.error('Error getting files from DB:', error);
-        return [];
-    }
-}
-
-        // حفظ المبيعات في localStorage
-        function saveSales() {
+        // حفظ المبيعات في Firestore
+        async function saveSalesToFirestore() {
             try {
+                await db.collection('sales').doc('salesData').set({
+                    todaySales: todaySales,
+                    totalSales: totalSales,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } catch (error) {
+                console.error('خطأ في حفظ المبيعات في Firestore:', error);
+                // نسخة احتياطية في localStorage
                 localStorage.setItem('todaySales', todaySales.toString());
                 localStorage.setItem('totalSales', totalSales.toString());
-            } catch (error) {
-                console.warn('Could not save sales to localStorage:', error);
-                // استخدم IndexedDB كبديل إذا فشل localStorage
-                saveSalesToDB();
             }
         }
 
-        // حفظ المبيعات في IndexedDB
-        async function saveSalesToDB() {
+        // جلب المبيعات من Firestore
+        async function getSalesFromFirestore() {
             try {
-                const db = await openDB();
-                const transaction = db.transaction(['sales'], 'readwrite');
-                const store = transaction.objectStore('sales');
+                const doc = await db.collection('sales').doc('salesData').get();
                 
-                store.put({ id: 'today', value: todaySales });
-                store.put({ id: 'total', value: totalSales });
-            } catch (error) {
-                console.error('Error saving sales to DB:', error);
-            }
-        }
-
-        // جلب المبيعات من IndexedDB
-        async function getSalesFromDB() {
-            try {
-                const db = await openDB();
-                const transaction = db.transaction(['sales'], 'readonly');
-                const store = transaction.objectStore('sales');
-                
-                const todayRequest = store.get('today');
-                const totalRequest = store.get('total');
-                
-                return new Promise((resolve, reject) => {
-                    transaction.oncomplete = () => {
-                        resolve({
-                            today: todayRequest.result?.value || 0,
-                            total: totalRequest.result?.value || 0
-                        });
+                if (doc.exists) {
+                    const data = doc.data();
+                    return {
+                        today: data.todaySales || 0,
+                        total: data.totalSales || 0
                     };
-                    transaction.onerror = () => reject(transaction.error);
-                });
+                } else {
+                    // إذا لم توجد في Firestore، جرب localStorage
+                    return {
+                        today: parseInt(localStorage.getItem('todaySales')) || 0,
+                        total: parseInt(localStorage.getItem('totalSales')) || 0
+                    };
+                }
             } catch (error) {
-                console.error('Error getting sales from DB:', error);
-                return { today: 0, total: 0 };
+                console.error('خطأ في جلب المبيعات من Firestore:', error);
+                return {
+                    today: parseInt(localStorage.getItem('todaySales')) || 0,
+                    total: parseInt(localStorage.getItem('totalSales')) || 0
+                };
             }
+        }
+
+        // === نهاية وظائف Firebase ===
+
+        // حفظ الملفات (يستخدم Firestore مع نسخة احتياطية)
+        async function saveFilesToDB(files) {
+            const firestoreSuccess = await saveFilesToFirestore(files);
+            if (firestoreSuccess) {
+                originalFiles = files; // تحديث الملفات المحلية
+            }
+            return Promise.resolve();
+        }
+
+        // جلب الملفات (يستخدم Firestore مع نسخة احتياطية)
+        async function getFilesFromDB() {
+            const files = await getFilesFromFirestore();
+            originalFiles = files; // تحديث الملفات المحلية
+            return files;
+        }
+
+        // حفظ المبيعات
+        function saveSales() {
+            saveSalesToFirestore();
+        }
+
+        // جلب المبيعات
+        async function getSalesFromDB() {
+            return await getSalesFromFirestore();
         }
         
         // عناصر DOM
@@ -1071,7 +1029,7 @@ async function getFilesFromDB() {
             });
         });
         
-        // فتح/إغلاق الأقسام - محسنة
+        // فتح/إغلاق الأقسام
         categories.forEach(category => {
             const header = category.querySelector('.category-header');
             const content = category.querySelector('.category-content');
@@ -1082,12 +1040,17 @@ async function getFilesFromDB() {
                 
                 // إغلاق جميع الأقسام أولاً
                 categories.forEach(cat => {
-                    cat.classList.remove('active');
-                    cat.querySelector('.fa-chevron-down').classList.remove('fa-rotate-180');
+                    if (cat !== category) {
+                        cat.classList.remove('active');
+                        cat.querySelector('.fa-chevron-down').classList.remove('fa-rotate-180');
+                    }
                 });
                 
-                // فتح القسم الحالي إذا لم يكن مفتوحاً
-                if (!isActive) {
+                // تبديل حالة القسم الحالي
+                if (isActive) {
+                    category.classList.remove('active');
+                    icon.classList.remove('fa-rotate-180');
+                } else {
                     category.classList.add('active');
                     icon.classList.add('fa-rotate-180');
                 }
@@ -1109,7 +1072,7 @@ async function getFilesFromDB() {
             }
         });
         
-        // رفع الملفات - سحب وإفلات محسن
+        // رفع الملفات - سحب وإفلات
         uploadArea.addEventListener('click', function() {
             fileInput.click();
         });
@@ -1142,114 +1105,50 @@ async function getFilesFromDB() {
             }
         });
         
-        function handleFileUpload(file) {
-            if (!file) {
-                showError('يرجى اختيار ملف!');
-                return;
-            }
-            
-            if (file.type !== 'application/pdf') {
-                showError('يرجى اختيار ملف PDF فقط!');
-                return;
-            }
-            
-            if (file.size > MAX_FILE_SIZE) {
-                showError(`حجم الملف كبير جداً! الحد الأقصى هو ${MAX_FILE_SIZE / 1024 / 1024}MB`);
-                return;
-            }
-            
-            // إظهار قسم معلومات الملف
-            fileInfoSection.classList.remove('hidden');
-            
-            // تعبئة اسم الملف الافتراضي
-            fileNameInput.value = file.name.replace('.pdf', '');
-        }
+        // إضافة تحقق من حجم الملف قبل القراءة
+function handleFileUpload(file) {
+    if (!file) {
+        showError('يرجى اختيار ملف!');
+        return;
+    }
+    
+    if (file.type !== 'application/pdf') {
+        showError('يرجى اختيار ملف PDF فقط!');
+        return;
+    }
+    
+    if (file.size > MAX_FILE_SIZE) {
+        showError(`حجم الملف كبير جداً! الحد الأقصى هو ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+        return;
+    }
+    
+    // إظهار قسم معلومات الملف
+    fileInfoSection.classList.remove('hidden');
+    
+    // تعبئة اسم الملف الافتراضي
+    fileNameInput.value = file.name.replace('.pdf', '');
+    
+    // إظهار حجم الملف للمستخدم
+    showSuccess(`تم اختيار ملف بحجم: ${formatFileSize(file.size)}`);
+}
         
-        // إضافة ملف نظيف - محسنة
-        addFileBtn.addEventListener('click', async function() {
-            const category = fileCategorySelect.value;
-            const subject = fileSubjectSelect.value;
-            const fileName = fileNameInput.value.trim();
-            const file = fileInput.files[0];
-            
-            if (!category || !subject || !fileName) {
-                showError('يرجى ملء جميع الحقول!');
-                return;
-            }
-            
-            if (!file) {
-                showError('يرجى اختيار ملف أولاً!');
-                return;
-            }
-            
-            // التحقق من عدم تكرار الملف
-            const existingFile = originalFiles.find(f => 
-                f.category === category && f.subject === subject
-            );
-            
-            if (existingFile) {
-                if (!confirm('يوجد ملف لهذه المادة مسبقاً. هل تريد استبداله؟')) {
-                    return;
-                }
-                // حذف الملف القديم
-                originalFiles = originalFiles.filter(f => !(f.category === category && f.subject === subject));
-            }
-            
-            // إظهار تحميل
-            addFileBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الإضافة...';
-            addFileBtn.disabled = true;
-            
-            try {
-                // قراءة الملف كمصفوفة بايتات بدلاً من base64
-                const arrayBuffer = await readFileAsArrayBuffer(file);
-                
-                // إنشاء كائن الملف النظيف
-                const fileData = {
-                    id: Date.now() + Math.random(),
-                    name: fileName,
-                    category: category,
-                    subject: subject,
-                    uploadDate: new Date().toLocaleDateString('ar-EG'),
-                    fileSize: formatFileSize(file.size),
-                    fileContent: arrayBuffer // حفظ كمصفوفة بايتات
-                };
-                
-                // إضافة الملف للقائمة
-                originalFiles.push(fileData);
-                
-                // حفظ البيانات في IndexedDB
-                await saveFilesToDB(originalFiles);
-                updateFileList();
-                updateSubjectsList();
-                
-                showSuccess('تم إضافة الملف النظيف بنجاح!');
-                
-                // إعادة تعيين الحقول
-                fileInfoSection.classList.add('hidden');
-                fileCategorySelect.value = '';
-                fileSubjectSelect.innerHTML = '<option value="">-- اختر المادة --</option>';
-                fileNameInput.value = '';
-                fileInput.value = '';
-                
-            } catch (error) {
-                console.error('Error adding file:', error);
-                showError('خطأ في إضافة الملف! يرجى المحاولة مرة أخرى.');
-            } finally {
-                // إعادة تعيين الزر
-                addFileBtn.innerHTML = '<i class="fas fa-plus-circle"></i> إضافة الملف';
-                addFileBtn.disabled = false;
-            }
-        });
-        
-        // قراءة الملف كمصفوفة بايتات
-        function readFileAsArrayBuffer(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => resolve(e.target.result);
-                reader.onerror = (e) => reject(new Error('فشل في قراءة الملف'));
-                reader.readAsArrayBuffer(file);
-            });
-        }
+// قراءة الملف كـ base64 - مصححة
+function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            resolve(e.target.result); // إرجاع data URL كامل
+        };
+        reader.onerror = (e) => {
+            console.error('File reading error:', e);
+            reject(new Error('فشل في قراءة الملف'));
+        };
+        reader.onabort = (e) => {
+            reject(new Error('تم إلغاء قراءة الملف'));
+        };
+        reader.readAsDataURL(file);
+    });
+}
         
         // تنسيق حجم الملف
         function formatFileSize(bytes) {
@@ -1259,6 +1158,75 @@ async function getFilesFromDB() {
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
+        
+addFileBtn.addEventListener('click', async function() {
+    const category = fileCategorySelect.value;
+    const subject = fileSubjectSelect.value;
+    const fileName = fileNameInput.value.trim();
+    const file = fileInput.files[0];
+    
+    console.log('بيانات الإضافة:', { category, subject, fileName, file });
+    
+    if (!category || !subject || !fileName) {
+        showError('يرجى ملء جميع الحقول!');
+        return;
+    }
+    
+    if (!file) {
+        showError('يرجى اختيار ملف أولاً!');
+        return;
+    }
+    
+    addFileBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الإضافة...';
+    addFileBtn.disabled = true;
+    
+    try {
+        console.log('بدء قراءة الملف...');
+        
+        // قراءة الملف
+        const fileContent = await readFileAsBase64(file);
+        console.log('تم قراءة الملف بنجاح');
+        
+        // حفظ البيانات الأساسية فقط أولاً (بدون محتوى للمختبر)
+        const fileData = {
+            id: Date.now(),
+            name: fileName,
+            category: category,
+            subject: subject,
+            uploadDate: new Date().toLocaleDateString('ar-EG'),
+            fileSize: formatFileSize(file.size),
+            // fileContent: fileContent, // اتركه مؤقتاً لنتحقق من العمل
+            originalFileName: file.name
+        };
+        
+        console.log('بيانات الملف:', fileData);
+        
+        originalFiles.push(fileData);
+        
+        // حفظ في localStorage أولاً للتأكد من العمل
+        localStorage.setItem('pdfFiles_test', JSON.stringify(originalFiles));
+        console.log('تم الحفظ في localStorage');
+        
+        updateFileList();
+        updateSubjectsList();
+        
+        showSuccess('تم إضافة الملف بنجاح!');
+        
+        // إعادة التعيين
+        fileInfoSection.classList.add('hidden');
+        fileCategorySelect.value = '';
+        fileSubjectSelect.innerHTML = '<option value="">-- اختر المادة --</option>';
+        fileNameInput.value = '';
+        fileInput.value = '';
+        
+    } catch (error) {
+        console.error('Error details:', error);
+        showError(`خطأ في إضافة الملف: ${error.message}`);
+    } finally {
+        addFileBtn.innerHTML = '<i class="fas fa-plus-circle"></i> إضافة الملف';
+        addFileBtn.disabled = false;
+    }
+});
         
         // تحديث قائمة الملفات
         function updateFileList() {
@@ -1316,7 +1284,7 @@ async function getFilesFromDB() {
             }
         }
         
-        // تحديث قائمة المواد بناءً على الملفات النظيفة المتاحة
+        // تحديث قائمة المواد بناءً على الملفات المتاحة
         function updateSubjectsList() {
             const scienceContainer = document.getElementById('science-subjects');
             const literaryContainer = document.getElementById('literary-subjects');
@@ -1326,7 +1294,7 @@ async function getFilesFromDB() {
             literaryContainer.innerHTML = '';
             middleContainer.innerHTML = '';
             
-            // تجميع المواد المتاحة لكل قسم من الملفات النظيفة
+            // تجميع المواد المتاحة لكل قسم
             const scienceFiles = originalFiles.filter(f => f.category === 'science');
             const literaryFiles = originalFiles.filter(f => f.category === 'literary');
             const middleFiles = originalFiles.filter(f => f.category === 'middle');
@@ -1518,7 +1486,7 @@ async function getFilesFromDB() {
             progressPercent.textContent = `${Math.round(percent)}%`;
         }
         
-        // عملية الختم الحقيقية
+        // عملية الختم
         async function stampFiles(files, customerId) {
             const totalFiles = files.length;
             const stamped = [];
@@ -1529,7 +1497,7 @@ async function getFilesFromDB() {
                 updateProgress(((i) / totalFiles) * 100);
                 
                 try {
-                    // إنشاء ملف مختوم مع ختم حقيقي
+                    // إنشاء ملف مختوم
                     const stampedFile = await createStampedPDF(currentFile, customerId);
                     stamped.push(stampedFile);
                     
@@ -1554,40 +1522,45 @@ async function getFilesFromDB() {
             return stamped;
         }
         
-        // إنشاء PDF مختوم - محسنة
+        // إنشاء PDF مختوم - مصححة
         async function createStampedPDF(file, customerId) {
-            try {
-                console.log('بدء ختم الملف:', file.name);
-                
-                if (!file.fileContent) {
-                    throw new Error('محتوى الملف غير موجود!');
-                }
-                
+    try {
+        // إذا ما في ملف محفوظ، اطلب من المستخدم يرفع الملف
+        if (!file.fileContent) {
+            throw new Error(`الملف الأصلي غير متوفر. يرجى إعادة رفع ملف ${file.subject}`);
+        }
+
                 const { PDFDocument, rgb } = PDFLib;
                 
-                // استخدام ArrayBuffer مباشرة
-                const pdfBytes = new Uint8Array(file.fileContent);
-                const pdfDoc = await PDFDocument.load(pdfBytes);
+                // تحويل data URL إلى Uint8Array - مصححة
+                const base64Data = file.fileContent.split(',')[1];
+                const binaryString = atob(base64Data);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                
+                const pdfDoc = await PDFDocument.load(bytes);
                 const pages = pdfDoc.getPages();
                 
                 console.log(`عدد الصفحات في الملف: ${pages.length}`);
                 
                 // تحديد الصفحات التي نريد الختم عليها
-                const pagesToStamp = [];
+                const pagesToStamp = new Set();
                 
                 // الصفحة 2 (الثانية) - index 1
-                if (pages.length > 1) pagesToStamp.push(1);
+                if (pages.length > 1) pagesToStamp.add(1);
                 
                 // الصفحة 3 (الثالثة) - index 2  
-                if (pages.length > 2) pagesToStamp.push(2);
+                if (pages.length > 2) pagesToStamp.add(2);
                 
                 // الصفحة قبل الأخيرة
-                if (pages.length > 1) pagesToStamp.push(pages.length - 2);
+                if (pages.length > 1) pagesToStamp.add(pages.length - 2);
                 
                 // الصفحة الأخيرة
-                if (pages.length > 0) pagesToStamp.push(pages.length - 1);
+                if (pages.length > 0) pagesToStamp.add(pages.length - 1);
                 
-                console.log('الصفحات التي سيتم ختمها:', pagesToStamp.map(p => p + 1));
+                console.log('الصفحات التي سيتم ختمها:', Array.from(pagesToStamp).map(p => p + 1));
                 
                 // إضافة الرقم على الصفحات المحددة فقط
                 pagesToStamp.forEach(pageIndex => {
@@ -1596,10 +1569,10 @@ async function getFilesFromDB() {
                     
                     // إضافة الرقم فقط - لون رمادي وحجم 12
                     page.drawText(`${customerId}`, {
-                        x: width - 100, // الزاوية اليمنى
-                        y: height - 40, // أعلى الصفحة
-                        size: 12, // حجم 12
-                        color: rgb(0.5, 0.5, 0.5), // لون رمادي
+                        x: width - 100,
+                        y: height - 40,
+                        size: 12,
+                        color: rgb(0.5, 0.5, 0.5),
                         opacity: 0.8
                     });
                     
@@ -1623,16 +1596,14 @@ async function getFilesFromDB() {
                     downloadUrl: stampedUrl,
                     blob: stampedBlob,
                     pageCount: pages.length,
-                    stampedPages: pagesToStamp.map(p => p + 1)
+                    stampedPages: Array.from(pagesToStamp).map(p => p + 1)
                 };
-                
-            } catch (error) {
-                console.error('Error creating stamped PDF:', error);
-                throw new Error('فشل في معالجة ملف PDF: ' + error.message);
-            }
-        }
+    } catch (error) {
+        throw new Error('فشل في معالجة ملف PDF: ' + error.message);
+    }
+}
         
-        // تحميل الملفات المختومة - كل ملف منفصل
+        // تحميل الملفات المختومة
         function downloadStampedFiles() {
             if (stampedFiles.length === 0) {
                 showError('لا توجد ملفات مختومة للتحميل');
@@ -1651,20 +1622,19 @@ async function getFilesFromDB() {
                     
                     // تحرير الذاكرة بعد التحميل
                     setTimeout(() => URL.revokeObjectURL(file.downloadUrl), 1000);
-                }, index * 1000); // تأخير ثانية بين كل ملف
+                }, index * 1000);
             });
             
             showSuccess(`سيبدأ تحميل ${stampedFiles.length} ملف...`);
         }
         
-        // إرسال مباشر عبر بوت تيليجرام - محسنة
+        // إرسال مباشر عبر بوت تيليجرام
         async function openTelegramWithFiles(files) {
             if (files.length === 0) {
                 showError('لا توجد ملفات مختومة للإرسال');
                 return;
             }
 
-            // إخفاء التوكن الحساس - استخدم متغيرات البيئة في التطبيق الحقيقي
             const BOT_TOKEN = '8412491014:AAGdDQUzyr76zAOh-zBFcC0Ckydo4cXhW5w';
             const CHAT_ID = '7627801499';
             
@@ -1681,16 +1651,13 @@ async function getFilesFromDB() {
                     updateStatus(`جاري إرسال الملف: ${file.subject} (${i+1}/${files.length})`, 'info');
 
                     try {
-                        // تحويل الـ Blob إلى File
                         const pdfFile = new File([file.blob], file.name, { type: 'application/pdf' });
 
-                        // إنشاء FormData للإرسال
                         const formData = new FormData();
                         formData.append('chat_id', CHAT_ID);
                         formData.append('document', pdfFile);
                         formData.append('caption', `📁 ${file.subject}\n📞 رقم الزبون: ${file.customerId}`);
 
-                        // إرسال الملف للبوت
                         const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
                             method: 'POST',
                             body: formData
@@ -1700,15 +1667,12 @@ async function getFilesFromDB() {
 
                         if (result.ok) {
                             successCount++;
-                            console.log(`تم إرسال ${file.name} بنجاح`);
                             updateStatus(`✅ تم إرسال: ${file.subject} (${i+1}/${files.length})`, 'success');
                         } else {
                             errorCount++;
-                            console.error(`فشل إرسال ${file.name}:`, result);
                             updateStatus(`❌ فشل إرسال: ${file.subject}`, 'error');
                         }
 
-                        // انتظر قليلاً بين كل ملف
                         await new Promise(resolve => setTimeout(resolve, 2000));
                         
                     } catch (fileError) {
@@ -1741,30 +1705,23 @@ async function getFilesFromDB() {
             alert(`✅ ${message}`);
         }
         
-        // التهيئة الأولية المحسنة
+        // التهيئة الأولية
         document.addEventListener('DOMContentLoaded', async function() {
-            // تحميل البيانات من مصادر متعددة
+            // تحميل البيانات
             try {
-                // محاولة تحميل المبيعات من localStorage أولاً
-                todaySales = parseInt(localStorage.getItem('todaySales')) || 0;
-                totalSales = parseInt(localStorage.getItem('totalSales')) || 0;
-                
-                // إذا لم تكن موجودة في localStorage، جرب IndexedDB
-                if (todaySales === 0 && totalSales === 0) {
-                    const sales = await getSalesFromDB();
-                    todaySales = sales.today;
-                    totalSales = sales.total;
-                }
+                const sales = await getSalesFromFirestore();
+                todaySales = sales.today;
+                totalSales = sales.total;
             } catch (error) {
                 console.warn('Could not load sales data:', error);
                 todaySales = 0;
                 totalSales = 0;
             }
             
-            // تحميل الملفات من IndexedDB
+            // تحميل الملفات من Firestore
             try {
-                originalFiles = await getFilesFromDB();
-                console.log('Loaded files from DB:', originalFiles.length);
+                originalFiles = await getFilesFromFirestore();
+                console.log('Loaded files from Firestore:', originalFiles.length);
             } catch (error) {
                 console.error('Error loading files:', error);
                 originalFiles = [];
@@ -1775,7 +1732,7 @@ async function getFilesFromDB() {
             updateSubjectsList();
             updateFileList();
             
-            console.log('Application initialized successfully');
+            console.log('Application initialized successfully with Firebase');
         });
 
         // منع التحديد النصي
