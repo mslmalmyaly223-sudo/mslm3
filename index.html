@@ -1383,16 +1383,46 @@ addFileBtn.addEventListener('click', async function() {
             return names[category] || category;
         }
         
-        // حذف ملف
-        async function deleteFile(fileId) {
-            if (confirm('هل أنت متأكد من حذف هذا الملف؟')) {
-                originalFiles = originalFiles.filter(f => f.id != fileId);
-                await saveFilesToDB(originalFiles);
-                updateFileList();
-                updateSubjectsList();
-                showSuccess('تم حذف الملف بنجاح!');
-            }
+// حذف ملف
+async function deleteFile(fileId) {
+    if (confirm('هل أنت متأكد من حذف هذا الملف؟')) {
+        try {
+            // حذف من الملفات المحلية
+            originalFiles = originalFiles.filter(f => f.id != fileId);
+            
+            // حذف من IndexedDB
+            await deleteFileFromIndexedDB(fileId);
+            console.log('✅ تم حذف الملف من IndexedDB');
+            
+            // حذف من Firebase
+            await db.collection('pdfFiles').doc(fileId.toString()).delete();
+            console.log('✅ تم حذف الملف من Firebase');
+            
+            // تحديث الواجهة
+            updateFileList();
+            updateSubjectsList();
+            
+            showSuccess('تم حذف الملف بنجاح!');
+            
+        } catch (error) {
+            console.error('❌ خطأ في الحذف:', error);
+            showError(`خطأ في حذف الملف: ${error.message}`);
         }
+    }
+}
+
+// أضف دالة حذف من IndexedDB
+async function deleteFileFromIndexedDB(fileId) {
+    const db = await openIDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['files'], 'readwrite');
+        const store = transaction.objectStore('files');
+        
+        const request = store.delete(fileId);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(new Error('فشل في حذف الملف من التخزين المحلي'));
+    });
+}
         
         // تحديث قائمة المواد بناءً على الملفات المتاحة
         function updateSubjectsList() {
@@ -1476,6 +1506,20 @@ addFileBtn.addEventListener('click', async function() {
             }
         });
         
+        // تصفير المبيعات الكلية
+document.getElementById('reset-total').addEventListener('click', function() {
+    if (totalSales > 0) {
+        if (confirm('هل أنت متأكد من تصفير المبيعات الكلية؟ لا يمكن التراجع عن هذا الإجراء!')) {
+            totalSales = 0;
+            updateSalesDisplay();
+            saveSales();
+            showSuccess('تم تصفير المبيعات الكلية!');
+        }
+    } else {
+        showError('لا توجد مبيعات كلية!');
+    }
+});
+
         // تحديث عرض المبيعات
         function updateSalesDisplay() {
             todaySalesEl.textContent = todaySales.toLocaleString();
@@ -1874,6 +1918,33 @@ function readFileAsArrayBuffer(file) {
         reader.onerror = () => reject(new Error('فشل في قراءة الملف'));
         reader.readAsArrayBuffer(file);
     });
+}
+
+// تحقق من الملفات المحفوظة محلياً
+async function checkLocalFiles() {
+    try {
+        const db = await openIDB();
+        const transaction = db.transaction(['files'], 'readonly');
+        const store = transaction.objectStore('files');
+        const request = store.getAll();
+        
+        request.onsuccess = () => {
+            console.log(`📁 عدد الملفات في التخزين المحلي: ${request.result.length}`);
+            
+            // تحقق إذا في ملفات في IndexedDB لكن مش في القائمة
+            const localFileIds = request.result.map(f => f.id);
+            const missingFiles = localFileIds.filter(id => 
+                !originalFiles.some(f => f.id === id)
+            );
+            
+            if (missingFiles.length > 0) {
+                console.log('⚠️ يوجد ملفات في التخزين المحلي لكن مش في القائمة:', missingFiles);
+                // يمكن إضافتها تلقائياً أو طلب من المستخدم إعادة التحميل
+            }
+        };
+    } catch (error) {
+        console.error('خطأ في التحقق من الملفات المحلية:', error);
+    }
 }
 
 // التهيئة الأولية
