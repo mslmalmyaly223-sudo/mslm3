@@ -785,7 +785,12 @@
                 </div>
             </div>
         </div>
-        
+        <!-- أضف هذا بعد قائمة الملفات -->
+<div style="text-align: center; margin-top: 15px;">
+    <button id="clean-files" class="btn btn-accent" style="padding: 8px 15px; font-size: 0.85rem;">
+        <i class="fas fa-broom"></i> تنظيف الملفات التالفة
+    </button>
+</div>
         <!-- التنقل السفلي -->
         <div class="bottom-nav">
             <div class="nav-item" data-target="sales-section">
@@ -1338,40 +1343,50 @@ addFileBtn.addEventListener('click', async function() {
     }
 });
         
-        // تحديث قائمة الملفات
-        function updateFileList() {
-            fileListEl.innerHTML = '';
-            
-            if (originalFiles.length === 0) {
-                fileListEl.innerHTML = '<p style="text-align: center; color: #6c757d; padding: 20px;">لا توجد ملفات مضافة بعد</p>';
-                return;
+   // تحديث قائمة الملفات
+function updateFileList() {
+    fileListEl.innerHTML = '';
+    
+    if (originalFiles.length === 0) {
+        fileListEl.innerHTML = '<p style="text-align: center; color: #6c757d; padding: 20px;">لا توجد ملفات مضافة بعد</p>';
+        return;
+    }
+    
+    originalFiles.forEach(file => {
+        // تأكد من أن البيانات كاملة
+        const fileName = file.name || 'غير معروف';
+        const fileSubject = file.subject || 'غير معروف';
+        const fileCategory = file.category ? getCategoryName(file.category) : 'غير معروف';
+        const fileSize = file.fileSize || 'غير معروف';
+        
+        const fileItem = document.createElement('div');
+        fileItem.className = 'file-list-item';
+        fileItem.innerHTML = `
+            <div>
+                <div class="file-name">${fileName}.pdf</div>
+                <div style="color: #6c757d; font-size: 0.9rem;">${fileSubject} - ${fileCategory} - ${fileSize}</div>
+            </div>
+            <div class="file-actions">
+                <button class="delete-btn" data-id="${file.id}" style="background: var(--accent); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">
+                    <i class="fas fa-trash"></i> حذف
+                </button>
+            </div>
+        `;
+        fileListEl.appendChild(fileItem);
+    });
+    
+    // إضافة أحداث لأزرار الحذف
+    document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const fileId = this.getAttribute('data-id');
+            if (fileId && fileId !== 'undefined') {
+                deleteFile(fileId);
+            } else {
+                showError('خطأ: رقم الملف غير صحيح');
             }
-            
-            originalFiles.forEach(file => {
-                const fileItem = document.createElement('div');
-                fileItem.className = 'file-list-item';
-                fileItem.innerHTML = `
-                    <div>
-                        <div class="file-name">${file.name}.pdf</div>
-                        <div style="color: #6c757d; font-size: 0.9rem;">${file.subject} - ${getCategoryName(file.category)} - ${file.fileSize}</div>
-                    </div>
-                    <div class="file-actions">
-                        <button class="delete-btn" data-id="${file.id}" style="background: var(--accent); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">
-                            <i class="fas fa-trash"></i> حذف
-                        </button>
-                    </div>
-                `;
-                fileListEl.appendChild(fileItem);
-            });
-            
-            // إضافة أحداث لأزرار الحذف
-            document.querySelectorAll('.delete-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const fileId = this.getAttribute('data-id');
-                    deleteFile(fileId);
-                });
-            });
-        }
+        });
+    });
+}
         
         // الحصول على اسم القسم
         function getCategoryName(category) {
@@ -1855,7 +1870,12 @@ function checkLoadedFiles() {
     });
     console.log('=== نهاية التحقق ===');
 }
- 
+
+ // تنظيف الملفات التالفة
+document.getElementById('clean-files').addEventListener('click', function() {
+    cleanCorruptedFiles();
+});
+
  // فتح قاعدة بيانات IndexedDB
 function openIDB() {
     return new Promise((resolve, reject) => {
@@ -1944,6 +1964,39 @@ async function checkLocalFiles() {
         };
     } catch (error) {
         console.error('خطأ في التحقق من الملفات المحلية:', error);
+    }
+}
+
+// تنظيف الملفات التالفة
+async function cleanCorruptedFiles() {
+    try {
+        console.log('🧹 جاري تنظيف الملفات التالفة...');
+        
+        // تصفية الملفات التالفة
+        const validFiles = originalFiles.filter(file => 
+            file && file.id && file.name && file.subject && file.category
+        );
+        
+        // إذا في ملفات تالفة
+        if (validFiles.length < originalFiles.length) {
+            const corruptedCount = originalFiles.length - validFiles.length;
+            console.log(`⚠️ تم العثور على ${corruptedCount} ملف تالف`);
+            
+            // استبدال القائمة بالملفات السليمة فقط
+            originalFiles = validFiles;
+            
+            // حفظ القائمة المنظفة
+            await saveFilesToDB(originalFiles);
+            
+            // تحديث الواجهة
+            updateFileList();
+            updateSubjectsList();
+            
+            showSuccess(`تم تنظيف ${corruptedCount} ملف تالف`);
+        }
+        
+    } catch (error) {
+        console.error('خطأ في التنظيف:', error);
     }
 }
 
