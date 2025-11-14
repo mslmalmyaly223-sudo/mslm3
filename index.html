@@ -1012,32 +1012,76 @@
 
         // === وظائف نظام المبيعات والسجلات ===
 
-        // تصفير تلقائي لمبيعات اليوم الساعة 12 ليلاً بتوقيت العراق
+        // تصفير تلقائي لمبيعات اليوم الساعة 12 ليلاً بتوقيت العراق - الإصدار المحسّن
         function setupAutoReset() {
-            const now = new Date();
-            const baghdadOffset = 3 * 60 * 60 * 1000; // توقيت العراق UTC+3
-            const baghdadTime = new Date(now.getTime() + baghdadOffset);
+            console.log('⏰ بدء إعداد التصفير التلقائي...');
             
-            // حساب الوقت المتبقي حتى الساعة 12 ليلاً
-            const midnight = new Date(baghdadTime);
-            midnight.setHours(24, 0, 0, 0);
-            const timeUntilMidnight = midnight.getTime() - baghdadTime.getTime();
+            function calculateTimeUntilMidnight() {
+                const now = new Date();
+                
+                // توقيت العراق (UTC+3)
+                const baghdadTime = new Date(now.getTime() + (3 * 60 * 60 * 1000));
+                
+                // إنشاء تاريخ للساعة 12 ليلاً بتوقيت العراق
+                const midnight = new Date(baghdadTime);
+                midnight.setHours(24, 0, 0, 0);
+                
+                // حساب الوقت المتبقي حتى منتصف الليل
+                const timeUntilMidnight = midnight.getTime() - baghdadTime.getTime();
+                
+                console.log('🕒 الوقت الحالي في العراق:', baghdadTime.toLocaleString('ar-IQ'));
+                console.log('⏰ الساعة 12 ليلاً:', midnight.toLocaleString('ar-IQ'));
+                console.log(`⏳ الوقت المتبقي: ${Math.round(timeUntilMidnight/1000/60)} دقيقة`);
+                
+                return timeUntilMidnight;
+            }
+
+            function scheduleReset() {
+                const timeUntilMidnight = calculateTimeUntilMidnight();
+                
+                // جدولة التصفير للوقت المتبقي
+                setTimeout(() => {
+                    console.log('🔄 تنفيذ التصفير التلقائي...');
+                    resetTodaySales();
+                    
+                    // بعد التنفيذ، جدولة التصفير التالي لـ 24 ساعة
+                    setInterval(resetTodaySales, 24 * 60 * 60 * 1000);
+                    
+                }, timeUntilMidnight);
+            }
+
+            // التحقق أولاً إذا كان اليوم قد تغير
+            checkAndResetIfNewDay();
             
-            console.log(`⏰ سيتم تصفير المبيعات بعد: ${Math.round(timeUntilMidnight/1000/60)} دقيقة`);
-            
-            setTimeout(() => {
-                resetTodaySales();
-                // تكرار كل 24 ساعة
-                setInterval(resetTodaySales, 24 * 60 * 60 * 1000);
-            }, timeUntilMidnight);
+            // ثم جدولة التصفير التلقائي
+            scheduleReset();
         }
 
-        // تصفير مبيعات اليوم
+        // التحقق إذا تغير اليوم وتنفيذ التصفير إذا لزم الأمر
+        function checkAndResetIfNewDay() {
+            const lastResetDate = localStorage.getItem('lastResetDate');
+            const today = new Date().toDateString();
+            
+            if (lastResetDate !== today) {
+                console.log('📅 تم تغيير اليوم، جاري تصفير المبيعات...');
+                resetTodaySales();
+                localStorage.setItem('lastResetDate', today);
+            }
+        }
+
+        // تصفير مبيعات اليوم فقط (المجموع الكلي يبقى كما هو)
         async function resetTodaySales() {
+            console.log(`🔄 تصفير مبيعات اليوم: ${todaySales} دينار`);
+            
             todaySales = 0;
             updateSalesDisplay();
             await saveSalesToFirestore();
+            
+            // تحديث تاريخ التصفير الأخير
+            localStorage.setItem('lastResetDate', new Date().toDateString());
+            
             console.log('✅ تم تصفير مبيعات اليوم تلقائياً');
+            showSuccess('تم تصفير مبيعات اليوم تلقائياً!');
         }
 
         // حفظ سجل بيع جديد
@@ -1084,12 +1128,12 @@
                 console.log(`✅ تم جلب ${salesRecords.length} سجل بيع`);
                 return salesRecords;
             } catch (error) {
-                console.error('❌ خطأ في جلب سجلات البيع:', error);
+                console.error('❌ خطأ في جلب سجلال البيع:', error);
                 return [];
             }
         }
 
-        // فتح صفحة سجلات البيع
+        // فتح صفحة سجلات البيع (بدون إجمالي الإيرادات)
         function openSalesRecordsPage() {
             const recordsPage = window.open('', 'سجلات البيع', 'width=800,height=600,scrollbars=yes');
             
@@ -1233,11 +1277,6 @@
                                 <div class="stat-value" id="total-records">0</div>
                                 <div class="stat-label">إجمالي المعاملات</div>
                             </div>
-                            <div class="stat-card">
-                                <i class="fas fa-money-bill-wave"></i>
-                                <div class="stat-value" id="total-revenue">0</div>
-                                <div class="stat-label">إجمالي الإيرادات</div>
-                            </div>
                         </div>
                         
                         <div class="search-box">
@@ -1317,13 +1356,11 @@
                             displaySalesRecords(filtered);
                         }
                         
-                        // تحديث الإحصائيات
+                        // تحديث الإحصائيات (إجمالي المعاملات فقط)
                         function updateStats() {
                             const totalRecords = allRecords.length;
-                            const totalRevenue = allRecords.reduce((sum, record) => sum + record.totalAmount, 0);
                             
                             document.getElementById('total-records').textContent = totalRecords.toLocaleString();
-                            document.getElementById('total-revenue').textContent = totalRevenue.toLocaleString() + ' دينار';
                         }
                         
                         // أحداث
@@ -2418,7 +2455,7 @@
                 originalFiles = [];
             }
             
-            // إعداد التصفير التلقائي
+            // إعداد التصفير التلقائي المحسّن
             setupAutoReset();
             
             // تحديث الواجهة
