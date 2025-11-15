@@ -2201,67 +2201,226 @@
             return stamped;
         }
         
-        async function createStampedPDF(file, customerId) {
+        // استبدال دالة createStampedPDF بالنسخة المحسنة
+async function createStampedPDF(file, customerId) {
+    try {
+        console.log('🔄 بدء ختم ملف:', file.name, 'ID:', file.id);
+        
+        // التحقق من وجود الملف في البيانات المحلية أولاً
+        if (!file.id) {
+            throw new Error('معرف الملف غير موجود');
+        }
+
+        // جلب محتوى الملف من IndexedDB مع معالجة الأخطاء المحسنة
+        console.log('📥 جاري تحميل الملف من IndexedDB...');
+        let fileBuffer;
+        
+        try {
+            fileBuffer = await getFileFromIndexedDB(file.id);
+            console.log('✅ تم تحميل الملف من IndexedDB، الحجم:', fileBuffer.byteLength);
+        } catch (indexedDBError) {
+            console.warn('⚠️ الملف غير موجود في IndexedDB، جاري البحث في Firebase...');
+            
+            // محاولة الاسترجاع من Firebase كنسخة احتياطية
             try {
-                console.log('🔄 بدء ختم ملف:', file.name);
+                fileBuffer = await getFileFromFirebase(file.id);
+                console.log('✅ تم استرجاع الملف من Firebase');
                 
-                // جلب محتوى الملف من IndexedDB
-                console.log('📥 جاري تحميل الملف من IndexedDB...');
-                const fileBuffer = await getFileFromIndexedDB(file.id);
-                
-                const { PDFDocument, rgb } = PDFLib;
-                
-                console.log('📄 جاري تحميل PDF...');
-                const pdfDoc = await PDFDocument.load(fileBuffer);
-                const pages = pdfDoc.getPages();
-                
-                console.log(`📑 عدد الصفحات: ${pages.length}`);
-                
-                // تحديد الصفحات للختم
-                const pagesToStamp = new Set();
-                if (pages.length > 1) pagesToStamp.add(1);
-                if (pages.length > 2) pagesToStamp.add(2);
-                if (pages.length > 1) pagesToStamp.add(pages.length - 2);
-                if (pages.length > 0) pagesToStamp.add(pages.length - 1);
-                
-                console.log('📍 الصفحات المختومة:', Array.from(pagesToStamp).map(p => p + 1));
-                
-                // تطبيق الختم
-                pagesToStamp.forEach(pageIndex => {
-                    const page = pages[pageIndex];
-                    const { width, height } = page.getSize();
-                    
-                    page.drawText(`${customerId}`, {
-                        x: width - 100,
-                        y: height - 40,
-                        size: 12,
-                        color: rgb(0.5, 0.5, 0.5),
-                        opacity: 0.8
-                    });
-                });
-                
-                // حفظ الملف المختوم
-                const stampedPdfBytes = await pdfDoc.save();
-                const stampedBlob = new Blob([stampedPdfBytes], { type: 'application/pdf' });
-                const stampedUrl = URL.createObjectURL(stampedBlob);
-                
-                console.log('✅ تم الختم بنجاح');
-                
-                return {
-                    name: `مرشحات_${file.subject}.pdf`,
-                    subject: file.subject,
-                    customerId: customerId,
-                    timestamp: new Date().toLocaleString('ar-EG'),
-                    downloadUrl: stampedUrl,
-                    blob: stampedBlob,
-                    pageCount: pages.length
-                };
-                
-            } catch (error) {
-                console.error('❌ خطأ في الختم:', error);
-                throw new Error('فشل في معالجة ملف PDF: ' + error.message);
+                // حفظ الملف في IndexedDB للمستقبل
+                await saveFileToIndexedDB(file.id, fileBuffer);
+                console.log('✅ تم حفظ الملف في IndexedDB للاستخدام المستقبلي');
+            } catch (firebaseError) {
+                throw new Error(`الملف غير متوفر في أي مصدر تخزين: ${file.name}`);
             }
         }
+
+        // متابعة عملية الختم العادية
+        const { PDFDocument, rgb } = PDFLib;
+        
+        console.log('📄 جاري تحميل PDF...');
+        const pdfDoc = await PDFDocument.load(fileBuffer);
+        const pages = pdfDoc.getPages();
+        
+        console.log(`📑 عدد الصفحات: ${pages.length}`);
+        
+        if (pages.length === 0) {
+            throw new Error('ملف PDF فارغ');
+        }
+        
+        // تحديد الصفحات للختم
+        const pagesToStamp = new Set();
+        if (pages.length > 1) pagesToStamp.add(1);
+        if (pages.length > 2) pagesToStamp.add(2);
+        if (pages.length > 1) pagesToStamp.add(pages.length - 2);
+        if (pages.length > 0) pagesToStamp.add(pages.length - 1);
+        
+        console.log('📍 الصفحات المختومة:', Array.from(pagesToStamp).map(p => p + 1));
+        
+        // تطبيق الختم
+        pagesToStamp.forEach(pageIndex => {
+            const page = pages[pageIndex];
+            const { width, height } = page.getSize();
+            
+            page.drawText(`${customerId}`, {
+                x: width - 100,
+                y: height - 40,
+                size: 12,
+                color: rgb(0.5, 0.5, 0.5),
+                opacity: 0.8
+            });
+        });
+        
+        // حفظ الملف المختوم
+        const stampedPdfBytes = await pdfDoc.save();
+        const stampedBlob = new Blob([stampedPdfBytes], { type: 'application/pdf' });
+        const stampedUrl = URL.createObjectURL(stampedBlob);
+        
+        console.log('✅ تم الختم بنجاح');
+        
+        return {
+            name: `مرشحات_${file.subject}.pdf`,
+            subject: file.subject,
+            customerId: customerId,
+            timestamp: new Date().toLocaleString('ar-EG'),
+            downloadUrl: stampedUrl,
+            blob: stampedBlob,
+            pageCount: pages.length
+        };
+        
+    } catch (error) {
+        console.error('❌ خطأ في الختم:', error);
+        throw new Error(`فشل في معالجة ملف PDF (${file.subject}): ${error.message}`);
+    }
+}
+
+// إضافة دالة لاسترجاع الملف من Firebase
+async function getFileFromFirebase(fileId) {
+    try {
+        console.log('🔥 جاري استرجاع الملف من Firebase...');
+        
+        // جلب البيانات الوصفية أولاً
+        const doc = await db.collection('pdfFiles').doc(fileId.toString()).get();
+        
+        if (!doc.exists) {
+            throw new Error('الملف غير موجود في Firebase');
+        }
+        
+        const fileData = doc.data();
+        
+        // إذا كان الملف مخزناً في IndexedDB ولكن ضاعت البيانات
+        if (fileData.storedIn === 'indexedDB') {
+            throw new Error('الملف مفقود من التخزين المحلي');
+        }
+        
+        // إذا كان الملف مخزناً مباشرة في Firebase (الطريقة القديمة)
+        if (fileData.fileContent) {
+            console.log('📦 الملف مخزن مباشرة في Firebase');
+            // هنا يمكن إضافة كود لتحويل base64 إلى ArrayBuffer إذا كان مخزناً بهذه الطريقة
+            throw new Error('تنسيق التخزين القديم غير مدعوم');
+        }
+        
+        throw new Error('تنسيق التخزين غير معروف');
+        
+    } catch (error) {
+        console.error('❌ خطأ في استرجاع الملف من Firebase:', error);
+        throw error;
+    }
+}
+
+// إضافة دالة للتحقق من صحة الملفات قبل البدء
+async function validateFilesBeforeStamping(files) {
+    const validFiles = [];
+    const missingFiles = [];
+    
+    for (const file of files) {
+        try {
+            // التحقق من وجود الملف في IndexedDB
+            await getFileFromIndexedDB(file.id);
+            validFiles.push(file);
+        } catch (error) {
+            console.warn(`⚠️ الملف غير متوفر: ${file.subject}`, error);
+            missingFiles.push(file.subject);
+        }
+    }
+    
+    if (missingFiles.length > 0) {
+        throw new Error(`الملفات التالية غير متوفرة: ${missingFiles.join(', ')}. يرجى إعادة تحميلها.`);
+    }
+    
+    return validFiles;
+}
+
+// تعديل دالة stampFiles لإضافة التحقق
+async function stampFiles(files, customerId, price) {
+    const totalFiles = files.length;
+    const stamped = [];
+    
+    // التحقق من صحة الملفات أولاً
+    updateStatus('جاري التحقق من توفر الملفات...', 'info');
+    const validFiles = await validateFilesBeforeStamping(files);
+    
+    if (validFiles.length === 0) {
+        throw new Error('لا توجد ملفات صالحة للختم');
+    }
+    
+    if (validFiles.length < files.length) {
+        updateStatus(`⚠️ سيتم ختم ${validFiles.length} من أصل ${files.length} ملف`, 'info');
+    }
+    
+    for (let i = 0; i < validFiles.length; i++) {
+        const currentFile = validFiles[i];
+        updateStatus(`جاري ختم ملف: ${currentFile.subject} (${i+1}/${validFiles.length})<br>رقم الزبون: ${customerId}<br>السعر: ${price.toLocaleString()} دينار`, 'info');
+        updateProgress(((i) / validFiles.length) * 100);
+        
+        try {
+            const stampedFile = await createStampedPDF(currentFile, customerId);
+            stamped.push(stampedFile);
+            
+            updateProgress(((i + 1) / validFiles.length) * 100);
+            
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+        } catch (error) {
+            console.error('Error stamping file:', error);
+            // الاستمرار في الملفات الأخرى بدلاً من التوقف
+            updateStatus(`⚠️ تخطي ملف ${currentFile.subject}: ${error.message}`, 'error');
+            continue;
+        }
+    }
+    
+    if (stamped.length === 0) {
+        throw new Error('فشل ختم جميع الملفات');
+    }
+    
+    // استخدام السعر المختار بدلاً من FILE_PRICE الثابت
+    const totalAmount = stamped.length * price;
+    todaySales += totalAmount;
+    totalSales += totalAmount;
+    
+    // حفظ سجل البيع
+    await saveSalesRecord(customerId, stamped.length, price, totalAmount);
+    
+    updateSalesDisplay();
+    saveSales();
+    
+    return stamped;
+}
+
+// إضافة زر لإعادة تحميل الملفات المفقودة
+function addReloadMissingFilesButton() {
+    const reloadButton = document.createElement('button');
+    reloadButton.className = 'btn btn-accent';
+    reloadButton.innerHTML = '<i class="fas fa-redo"></i> إعادة تحميل الملفات المفقودة';
+    reloadButton.style.marginTop = '10px';
+    reloadButton.onclick = reloadMissingFiles;
+    
+    statusMessage.parentNode.appendChild(reloadButton);
+}
+
+async function reloadMissingFiles() {
+    // هذه الدالة تحتاج إلى تنفيذ حسب نظامك
+    showError('هذه الخاصية قيد التطوير. يرجى إعادة تحميل الملفات يدوياً من قسم "إضافة الملفات"');
+}
         
         // الحصول على الملفات المحددة
         function getSelectedFiles() {
