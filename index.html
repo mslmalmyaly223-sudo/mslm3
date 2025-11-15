@@ -229,6 +229,17 @@
             box-shadow: 0 2px 5px rgba(0, 136, 204, 0.3);
         }
         
+        .btn-download {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+        }
+        
+        .btn-download:active {
+            background: #218838;
+            transform: translateY(1px);
+            box-shadow: 0 2px 5px rgba(40, 167, 69, 0.3);
+        }
+        
         .action-buttons {
             display: flex;
             gap: 10px;
@@ -503,7 +514,7 @@
         }
         
         .file-list {
-            max-height: 200px;
+            max-height: 300px;
             overflow-y: auto;
             margin-bottom: 15px;
             border: 1px solid #e9ecef;
@@ -516,13 +527,33 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 10px 12px;
+            padding: 12px 15px;
             border-bottom: 1px solid #e9ecef;
-            min-height: 44px;
+            min-height: 60px;
         }
         
         .file-list-item:last-child {
             border-bottom: none;
+        }
+        
+        .file-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: nowrap;
+        }
+        
+        .file-action-btn {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            min-width: 70px;
+            justify-content: center;
         }
         
         .telegram-section {
@@ -684,6 +715,17 @@
             
             .btn {
                 width: 100%;
+            }
+            
+            .file-actions {
+                flex-direction: column;
+                gap: 5px;
+            }
+            
+            .file-action-btn {
+                min-width: 60px;
+                padding: 6px 10px;
+                font-size: 0.75rem;
             }
         }
         
@@ -905,6 +947,17 @@
                     <div class="file-list" id="file-list">
                         <!-- سيتم عرض الملفات المضافة هنا -->
                     </div>
+                    
+                    <div class="action-buttons">
+                        <button id="download-all-files" class="btn btn-download">
+                            <i class="fas fa-download"></i>
+                            تحميل جميع الملفات الأصلية
+                        </button>
+                        <button id="telegram-all-files" class="btn btn-telegram">
+                            <i class="fab fa-telegram"></i>
+                            إرسال الكل إلى تيليجرام
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1009,6 +1062,149 @@
             literary: ["إسلامية", "عربي", "انكليزي", "رياضيات", "اقتصاد", "تاريخ", "جغرافية"],
             middle: ["إسلامية", "عربي", "انكليزي", "رياضيات", "أحياء", "كيمياء", "فيزياء", "اجتماعيات"]
         };
+
+        // === نظام IndexedDB المحسن ===
+        const DB_NAME = 'PDFFilesDB';
+        const DB_VERSION = 2;
+        const STORE_NAME = 'files';
+
+        function openIDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                
+                request.onerror = () => {
+                    console.error('❌ فشل في فتح قاعدة البيانات');
+                    reject(new Error('فشل في فتح قاعدة البيانات'));
+                };
+                
+                request.onsuccess = () => {
+                    console.log('✅ تم فتح قاعدة البيانات بنجاح');
+                    resolve(request.result);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    console.log('🔄 ترقية قاعدة البيانات...');
+                    
+                    // حذف المخزن القديم إذا كان موجوداً
+                    if (db.objectStoreNames.contains(STORE_NAME)) {
+                        db.deleteObjectStore(STORE_NAME);
+                    }
+                    
+                    // إنشاء مخزن جديد
+                    const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                    console.log('✅ تم إنشاء مخزن الملفات الجديد');
+                };
+            });
+        }
+
+        // دالة محسنة لحفظ الملف في IndexedDB
+        async function saveFileToIndexedDB(fileId, fileBuffer) {
+            console.log('💾 جاري حفظ الملف في IndexedDB، ID:', fileId);
+            
+            try {
+                const db = await openIDB();
+                
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction([STORE_NAME], 'readwrite');
+                    const store = transaction.objectStore(STORE_NAME);
+                    
+                    const fileData = {
+                        id: fileId,
+                        content: fileBuffer,
+                        timestamp: new Date(),
+                        size: fileBuffer.byteLength
+                    };
+                    
+                    const request = store.put(fileData);
+                    
+                    request.onsuccess = () => {
+                        console.log('✅ تم حفظ الملف في IndexedDB بنجاح');
+                        resolve();
+                    };
+                    
+                    request.onerror = () => {
+                        console.error('❌ فشل في حفظ الملف في IndexedDB');
+                        reject(new Error('فشل في حفظ الملف في التخزين المحلي'));
+                    };
+                    
+                    transaction.oncomplete = () => {
+                        console.log('✅ اكتملت عملية الحفظ');
+                        db.close();
+                    };
+                });
+            } catch (error) {
+                console.error('❌ خطأ في حفظ الملف:', error);
+                throw error;
+            }
+        }
+
+        // دالة محسنة لجلب الملف من IndexedDB
+        async function getFileFromIndexedDB(fileId) {
+            console.log('📥 جاري جلب الملف من IndexedDB، ID:', fileId);
+            
+            try {
+                const db = await openIDB();
+                
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction([STORE_NAME], 'readonly');
+                    const store = transaction.objectStore(STORE_NAME);
+                    
+                    const request = store.get(fileId);
+                    
+                    request.onsuccess = () => {
+                        if (request.result) {
+                            console.log('✅ تم العثور على الملف في IndexedDB');
+                            resolve(request.result.content);
+                        } else {
+                            console.error('❌ الملف غير موجود في IndexedDB');
+                            reject(new Error('الملف غير موجود في التخزين المحلي'));
+                        }
+                    };
+                    
+                    request.onerror = () => {
+                        console.error('❌ فشل في جلب الملف من IndexedDB');
+                        reject(new Error('فشل في الوصول إلى الملف'));
+                    };
+                    
+                    transaction.oncomplete = () => {
+                        db.close();
+                    };
+                });
+            } catch (error) {
+                console.error('❌ خطأ في جلب الملف:', error);
+                throw error;
+            }
+        }
+
+        // دالة جديدة للتحقق من وجود الملف
+        async function checkFileExists(fileId) {
+            try {
+                const db = await openIDB();
+                
+                return new Promise((resolve) => {
+                    const transaction = db.transaction([STORE_NAME], 'readonly');
+                    const store = transaction.objectStore(STORE_NAME);
+                    
+                    const request = store.get(fileId);
+                    
+                    request.onsuccess = () => {
+                        resolve(!!request.result);
+                    };
+                    
+                    request.onerror = () => {
+                        resolve(false);
+                    };
+                    
+                    transaction.oncomplete = () => {
+                        db.close();
+                    };
+                });
+            } catch (error) {
+                console.error('❌ خطأ في التحقق من الملف:', error);
+                return false;
+            }
+        }
 
         // === وظائف نظام المبيعات والسجلات ===
 
@@ -1542,6 +1738,8 @@
         const fileNameInput = document.getElementById('file-name');
         const addFileBtn = document.getElementById('add-file');
         const fileListEl = document.getElementById('file-list');
+        const downloadAllFilesBtn = document.getElementById('download-all-files');
+        const telegramAllFilesBtn = document.getElementById('telegram-all-files');
         
         const customerModal = document.getElementById('customer-modal');
         const customerIdInput = document.getElementById('customer-id-input');
@@ -1669,21 +1867,12 @@
             showSuccess(`تم اختيار ملف بحجم: ${formatFileSize(file.size)}`);
         }
         
-        function readFileAsBase64(file) {
+        function readFileAsArrayBuffer(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
-                reader.onload = (e) => {
-                    // إرجاع base64 فقط بدون data URL prefix
-                    const base64 = e.target.result.split(',')[1];
-                    resolve(base64);
-                };
-                reader.onerror = (e) => {
-                    reject(new Error('فشل في قراءة الملف'));
-                };
-                reader.onabort = (e) => {
-                    reject(new Error('تم إلغاء قراءة الملف'));
-                };
-                reader.readAsDataURL(file);
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = () => reject(new Error('فشل في قراءة الملف'));
+                reader.readAsArrayBuffer(file);
             });
         }
         
@@ -1696,13 +1885,130 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
         
-        addFileBtn.addEventListener('click', async function() {
+        // 1. أولاً أصلح دالة getSelectedFiles
+        function getSelectedFiles() {
+            const selected = [];
+            console.log('🔍 البحث عن الملفات المحددة...');
+            
+            document.querySelectorAll('.subject-checkbox:checked').forEach(checkbox => {
+                const label = checkbox.nextElementSibling;
+                const subjectName = label.textContent.replace(' (غير متوفر)', '').trim();
+                const category = checkbox.dataset.category;
+                
+                console.log(`📌 مادة محددة: ${subjectName}, قسم: ${category}`);
+                
+                // البحث عن الملف المناسب
+                const fileData = originalFiles.find(f => {
+                    const match = f.subject === subjectName && f.category === category;
+                    if (match) {
+                        console.log(`✅ وجد الملف: ${f.name}, ID: ${f.id}`);
+                    }
+                    return match;
+                });
+                
+                if (fileData) {
+                    selected.push(fileData);
+                } else {
+                    console.warn(`❌ لم يتم العثور على ملف للمادة: ${subjectName}, القسم: ${category}`);
+                }
+            });
+            
+            console.log(`📁 عدد الملفات المحددة: ${selected.length}`);
+            return selected;
+        }
+
+        // 2. أصلح دالة updateSubjectsList
+        function updateSubjectsList() {
+            const scienceContainer = document.getElementById('science-subjects');
+            const literaryContainer = document.getElementById('literary-subjects');
+            const middleContainer = document.getElementById('middle-subjects');
+            
+            scienceContainer.innerHTML = '';
+            literaryContainer.innerHTML = '';
+            middleContainer.innerHTML = '';
+            
+            console.log('🔄 تحديث قائمة المواد...');
+            console.log('📂 الملفات المتاحة:', originalFiles);
+            
+            // تجميع المواد المتاحة لكل قسم
+            const scienceFiles = originalFiles.filter(f => f.category === 'science');
+            const literaryFiles = originalFiles.filter(f => f.category === 'literary');
+            const middleFiles = originalFiles.filter(f => f.category === 'middle');
+            
+            console.log('🔬 الملفات العلمية:', scienceFiles);
+            console.log('📚 الملفات الأدبية:', literaryFiles);
+            console.log('🎓 ملفات الثالث متوسط:', middleFiles);
+            
+            // إضافة المواد للقسم العلمي
+            fileCategories.science.forEach(subject => {
+                const hasFile = scienceFiles.some(f => {
+                    const match = f.subject === subject;
+                    if (match) console.log(`✅ ${subject} متوفر في العلمي`);
+                    return match;
+                });
+                addSubjectItem(scienceContainer, subject, hasFile, 'science');
+            });
+            
+            // إضافة المواد للقسم الأدبي
+            fileCategories.literary.forEach(subject => {
+                const hasFile = literaryFiles.some(f => f.subject === subject);
+                addSubjectItem(literaryContainer, subject, hasFile, 'literary');
+            });
+            
+            // إضافة المواد للثالث متوسط
+            fileCategories.middle.forEach(subject => {
+                const hasFile = middleFiles.some(f => f.subject === subject);
+                addSubjectItem(middleContainer, subject, hasFile, 'middle');
+            });
+            
+            updateSelectedCount();
+        }
+
+        // 3. أصلح دالة addSubjectItem
+        function addSubjectItem(container, subject, hasFile, category) {
+            const subjectItem = document.createElement('div');
+            subjectItem.className = `subject-item ${hasFile ? '' : 'disabled'}`;
+            
+            // إنشاء معرف فريد للمادة
+            const subjectId = `${category}-${subject.replace(/\s+/g, '-')}`;
+            
+            subjectItem.innerHTML = `
+                <input type="checkbox" class="subject-checkbox" id="${subjectId}" 
+                       data-category="${category}" data-subject="${subject}"
+                       ${hasFile ? '' : 'disabled'}>
+                <label for="${subjectId}">${subject} ${hasFile ? '' : '(غير متوفر)'}</label>
+            `;
+            container.appendChild(subjectItem);
+            
+            // إضافة حدث التحديد
+            const checkbox = subjectItem.querySelector('.subject-checkbox');
+            if (hasFile) {
+                checkbox.addEventListener('change', function() {
+                    if (this.checked) {
+                        this.closest('.subject-item').classList.add('selected');
+                        console.log(`✓ تم اختيار: ${subject} - ${category}`);
+                    } else {
+                        this.closest('.subject-item').classList.remove('selected');
+                        console.log(`✗ تم إلغاء: ${subject} - ${category}`);
+                    }
+                    updateSelectedCount();
+                });
+            }
+        }
+
+        // 4. أصلح دالة إضافة الملفات لتسجيل البيانات بشكل صحيح
+        async function addFileBtn_click() {
             const category = fileCategorySelect.value;
             const subject = fileSubjectSelect.value;
             const fileName = fileNameInput.value.trim();
             const file = fileInput.files[0];
             
-            console.log('🔄 بدء إضافة ملف:', file?.name, 'الحجم:', file?.size);
+            console.log('🔄 بدء إضافة ملف:', {
+                category: category,
+                subject: subject,
+                fileName: fileName,
+                file: file?.name
+            });
             
             if (!category || !subject || !fileName) {
                 showError('يرجى ملء جميع الحقول!');
@@ -1714,84 +2020,40 @@
                 return;
             }
             
-            // تحقق من حجم الملف (10MB حد أقصى للـ IndexedDB)
-            if (file.size > 10 * 1024 * 1024) {
-                showError('حجم الملف كبير جداً! الحد الأقصى 10MB');
-                return;
-            }
-            
             addFileBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري المعالجة...';
             addFileBtn.disabled = true;
 
-            // إظهار مؤشر التقدم
-            const progressHTML = `
-                <div id="file-progress" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; text-align: center;">
-                    <div style="font-size: 14px; color: #4361ee; margin-bottom: 8px;">جاري تحضير الملف...</div>
-                    <div class="progress-bar" style="height: 10px; background: #e9ecef; border-radius: 5px; overflow: hidden;">
-                        <div id="file-progress-bar" style="height: 100%; background: #4361ee; width: 0%; transition: width 0.3s;"></div>
-                    </div>
-                    <div id="file-progress-text" style="font-size: 12px; color: #6c757d; margin-top: 5px;">0%</div>
-                </div>
-            `;
-            
-            fileInfoSection.insertAdjacentHTML('beforeend', progressHTML);
-            const progressBar = document.getElementById('file-progress-bar');
-            const progressText = document.getElementById('file-progress-text');
-
             try {
-                // تحديث التقدم
-                progressBar.style.width = '30%';
-                progressText.textContent = '30% - جاري قراءة الملف...';
-                
+                // قراءة الملف
                 console.log('📖 جاري قراءة الملف...');
-                
-                // قراءة الملف كـ ArrayBuffer (أفضل من base64)
                 const fileBuffer = await readFileAsArrayBuffer(file);
-                console.log('✅ تم قراءة الملف، الحجم:', fileBuffer.byteLength);
                 
-                // تحديث التقدم
-                progressBar.style.width = '60%';
-                progressText.textContent = '60% - جاري حفظ الملف محلياً...';
-                
-                // حفظ الملف في IndexedDB
+                // إنشاء معرف فريد
                 const fileId = Date.now();
+                
+                // حفظ في IndexedDB
+                console.log('💾 جاري حفظ الملف في التخزين...');
                 await saveFileToIndexedDB(fileId, fileBuffer);
-                console.log('✅ تم حفظ الملف في IndexedDB');
                 
-                // تحديث التقدم
-                progressBar.style.width = '80%';
-                progressText.textContent = '80% - جاري حفظ البيانات في Firebase...';
-                
-                // حفظ البيانات الوصفية فقط في Firebase (بدون محتوى الملف)
+                // إنشاء بيانات الملف - تأكد من تطابق الأسماء
                 const fileData = {
                     id: fileId,
                     name: fileName,
                     category: category,
-                    subject: subject,
+                    subject: subject, // هذا يجب أن يتطابق مع أسماء المواد في fileCategories
                     uploadDate: new Date().toLocaleDateString('ar-EG'),
                     fileSize: formatFileSize(file.size),
                     originalFileName: file.name,
-                    lastModified: new Date().toISOString(),
-                    // لا نحفظ fileContent هنا
-                    storedIn: 'indexedDB' //标记存储在IndexedDB中
+                    lastModified: new Date().toISOString()
                 };
                 
-                // حفظ البيانات الوصفية في Firebase
-                await db.collection('pdfFiles').doc(fileId.toString()).set(fileData);
-                console.log('✅ تم حفظ البيانات الوصفية في Firebase');
+                console.log('📝 بيانات الملف:', fileData);
                 
-                // تحديث التقدم النهائي
-                progressBar.style.width = '100%';
-                progressText.textContent = '100% - تم بنجاح!';
+                // حفظ في Firebase
+                await db.collection('pdfFiles').doc(fileId.toString()).set(fileData);
                 
                 // إضافة للملفات المحلية
                 originalFiles.push(fileData);
-                
-                // تأخير بسيط لرؤية التقدم
-                await new Promise(resolve => setTimeout(resolve, 500));
-                
-                // إزالة مؤشر التقدم
-                document.getElementById('file-progress').remove();
                 
                 // تحديث الواجهة
                 updateFileList();
@@ -1808,19 +2070,45 @@
                 
             } catch (error) {
                 console.error('❌ خطأ في الإضافة:', error);
-                
-                // إزالة مؤشر التقدم في حالة الخطأ
-                const progressElement = document.getElementById('file-progress');
-                if (progressElement) progressElement.remove();
-                
                 showError(`خطأ في إضافة الملف: ${error.message}`);
             } finally {
                 addFileBtn.innerHTML = '<i class="fas fa-plus-circle"></i> إضافة الملف';
                 addFileBtn.disabled = false;
             }
-        });
-        
-        // تحديث قائمة الملفات
+        }
+
+        // ربط حدث إضافة الملف بالدالة المحسنة
+        addFileBtn.addEventListener('click', addFileBtn_click);
+
+        // 5. أضف دالة لفحص البيانات
+        function debugFiles() {
+            console.log('🐛 تصحيح الأخطاء - بيانات الملفات:');
+            console.log('📂 جميع الملفات:', originalFiles);
+            
+            console.log('🔬 الملفات العلمية:', originalFiles.filter(f => f.category === 'science'));
+            console.log('📚 الملفات الأدبية:', originalFiles.filter(f => f.category === 'literary'));
+            console.log('🎓 ملفات المتوسط:', originalFiles.filter(f => f.category === 'middle'));
+            
+            console.log('📋 المواد المتوقعة:', fileCategories);
+            
+            // فحص التطابق بين الملفات والمواد
+            fileCategories.science.forEach(subject => {
+                const hasFile = originalFiles.some(f => f.category === 'science' && f.subject === subject);
+                console.log(`🔬 ${subject}: ${hasFile ? '✅ متوفر' : '❌ مفقود'}`);
+            });
+
+            fileCategories.literary.forEach(subject => {
+                const hasFile = originalFiles.some(f => f.category === 'literary' && f.subject === subject);
+                console.log(`📚 ${subject}: ${hasFile ? '✅ متوفر' : '❌ مفقود'}`);
+            });
+
+            fileCategories.middle.forEach(subject => {
+                const hasFile = originalFiles.some(f => f.category === 'middle' && f.subject === subject);
+                console.log(`🎓 ${subject}: ${hasFile ? '✅ متوفر' : '❌ مفقود'}`);
+            });
+        }
+
+        // 6. أصلح دالة updateFileList لعرض البيانات بشكل صحيح مع أزرار التحميل
         function updateFileList() {
             fileListEl.innerHTML = '';
             
@@ -1833,12 +2121,21 @@
                 const fileItem = document.createElement('div');
                 fileItem.className = 'file-list-item';
                 fileItem.innerHTML = `
-                    <div>
-                        <div class="file-name">${file.name}.pdf</div>
-                        <div style="color: #6c757d; font-size: 0.9rem;">${file.subject} - ${getCategoryName(file.category)} - ${file.fileSize}</div>
+                    <div style="flex: 1;">
+                        <div class="file-name" style="font-weight: bold; margin-bottom: 5px;">${file.name}.pdf</div>
+                        <div style="color: #6c757d; font-size: 0.9rem;">
+                            ${file.subject} - ${getCategoryName(file.category)} - ${file.fileSize}
+                        </div>
+                        <div style="color: #888; font-size: 0.8rem;">ID: ${file.id}</div>
                     </div>
                     <div class="file-actions">
-                        <button class="delete-btn" data-id="${file.id}" style="background: var(--accent); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">
+                        <button class="file-action-btn btn-download download-single-btn" data-id="${file.id}" data-name="${file.name}">
+                            <i class="fas fa-download"></i> تحميل
+                        </button>
+                        <button class="file-action-btn btn-telegram telegram-single-btn" data-id="${file.id}" data-name="${file.name}">
+                            <i class="fab fa-telegram"></i> تيليجرام
+                        </button>
+                        <button class="file-action-btn btn-accent delete-btn" data-id="${file.id}">
                             <i class="fas fa-trash"></i> حذف
                         </button>
                     </div>
@@ -1846,7 +2143,25 @@
                 fileListEl.appendChild(fileItem);
             });
             
-            // إضافة أحداث لأزرار الحذف
+            // إضافة أحداث لأزرار التحميل الفردي
+            document.querySelectorAll('.download-single-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const fileId = this.getAttribute('data-id');
+                    const fileName = this.getAttribute('data-name');
+                    downloadSingleFile(fileId, fileName);
+                });
+            });
+            
+            // إضافة أحداث لأزرار التليجرام الفردي
+            document.querySelectorAll('.telegram-single-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const fileId = this.getAttribute('data-id');
+                    const fileName = this.getAttribute('data-name');
+                    sendSingleFileToTelegram(fileId, fileName);
+                });
+            });
+            
+            // إضافة أحداث الحذف
             document.querySelectorAll('.delete-btn').forEach(btn => {
                 btn.addEventListener('click', function() {
                     const fileId = this.getAttribute('data-id');
@@ -1854,7 +2169,201 @@
                 });
             });
         }
-        
+
+        // دالة تحميل ملف فردي
+        async function downloadSingleFile(fileId, fileName) {
+            try {
+                console.log(`📥 جاري تحميل الملف: ${fileName}, ID: ${fileId}`);
+                
+                // جلب الملف من IndexedDB
+                const fileBuffer = await getFileFromIndexedDB(fileId);
+                
+                // إنشاء Blob و URL للتحميل
+                const blob = new Blob([fileBuffer], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                
+                // إنشاء رابط تحميل
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `${fileName}.pdf`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // تحرير الذاكرة بعد التحميل
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                
+                showSuccess(`تم تحميل الملف: ${fileName}.pdf`);
+                
+            } catch (error) {
+                console.error('❌ خطأ في تحميل الملف:', error);
+                showError(`فشل في تحميل الملف: ${error.message}`);
+            }
+        }
+
+        // دالة إرسال ملف فردي إلى تيليجرام
+        async function sendSingleFileToTelegram(fileId, fileName) {
+            const BOT_TOKEN = '8412491014:AAGdDQUzyr76zAOh-zBFcC0Ckydo4cXhW5w';
+            const CHAT_ID = '7627801499';
+            
+            try {
+                console.log(`📤 جاري إرسال الملف إلى تيليجرام: ${fileName}, ID: ${fileId}`);
+                
+                // جلب الملف من IndexedDB
+                const fileBuffer = await getFileFromIndexedDB(fileId);
+                
+                // إنشاء Blob
+                const blob = new Blob([fileBuffer], { type: 'application/pdf' });
+                const pdfFile = new File([blob], `${fileName}.pdf`, { type: 'application/pdf' });
+
+                // إعداد FormData
+                const formData = new FormData();
+                formData.append('chat_id', CHAT_ID);
+                formData.append('document', pdfFile);
+                formData.append('caption', `📁 ${fileName}\n📚 ملف أصلي من النظام`);
+
+                // إرسال إلى تيليجرام
+                const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.ok) {
+                    showSuccess(`✅ تم إرسال الملف ${fileName} إلى تيليجرام بنجاح`);
+                } else {
+                    showError(`❌ فشل إرسال الملف: ${result.description}`);
+                }
+
+            } catch (error) {
+                console.error('❌ خطأ في إرسال الملف:', error);
+                showError(`فشل في إرسال الملف إلى تيليجرام: ${error.message}`);
+            }
+        }
+
+        // دالة تحميل جميع الملفات الأصلية
+        async function downloadAllOriginalFiles() {
+            if (originalFiles.length === 0) {
+                showError('لا توجد ملفات للتحميل');
+                return;
+            }
+            
+            try {
+                console.log(`📦 جاري تحميل ${originalFiles.length} ملف...`);
+                
+                // استخدام JSZip لإنشاء أرشيف
+                const zip = new JSZip();
+                let processedFiles = 0;
+                
+                for (const file of originalFiles) {
+                    try {
+                        // جلب الملف من IndexedDB
+                        const fileBuffer = await getFileFromIndexedDB(file.id);
+                        
+                        // إضافة الملف إلى الأرشيف
+                        zip.file(`${file.name}.pdf`, fileBuffer);
+                        
+                        processedFiles++;
+                        console.log(`✅ تم إضافة: ${file.name}.pdf (${processedFiles}/${originalFiles.length})`);
+                        
+                    } catch (error) {
+                        console.error(`❌ خطأ في معالجة الملف ${file.name}:`, error);
+                    }
+                }
+                
+                // إنشاء الأرشيف
+                const zipBlob = await zip.generateAsync({ type: 'blob' });
+                const zipUrl = URL.createObjectURL(zipBlob);
+                
+                // تحميل الأرشيف
+                const link = document.createElement('a');
+                link.href = zipUrl;
+                link.download = 'الملفات_الأصلية.zip';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // تحرير الذاكرة
+                setTimeout(() => URL.revokeObjectURL(zipUrl), 1000);
+                
+                showSuccess(`تم تحميل ${processedFiles} ملف في الأرشيف`);
+                
+            } catch (error) {
+                console.error('❌ خطأ في تحميل الملفات:', error);
+                showError(`فشل في تحميل الملفات: ${error.message}`);
+            }
+        }
+
+        // دالة إرسال جميع الملفات الأصلية إلى تيليجرام
+        async function sendAllFilesToTelegram() {
+            if (originalFiles.length === 0) {
+                showError('لا توجد ملفات للإرسال');
+                return;
+            }
+            
+            const BOT_TOKEN = '8412491014:AAGdDQUzyr76zAOh-zBFcC0Ckydo4cXhW5w';
+            const CHAT_ID = '7627801499';
+            
+            telegramAllFilesBtn.disabled = true;
+            telegramAllFilesBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الإرسال...';
+            
+            try {
+                let successCount = 0;
+                let errorCount = 0;
+                
+                for (let i = 0; i < originalFiles.length; i++) {
+                    const file = originalFiles[i];
+                    
+                    try {
+                        // جلب الملف من IndexedDB
+                        const fileBuffer = await getFileFromIndexedDB(file.id);
+                        const blob = new Blob([fileBuffer], { type: 'application/pdf' });
+                        const pdfFile = new File([blob], `${file.name}.pdf`, { type: 'application/pdf' });
+
+                        // إعداد FormData
+                        const formData = new FormData();
+                        formData.append('chat_id', CHAT_ID);
+                        formData.append('document', pdfFile);
+                        formData.append('caption', `📁 ${file.name}\n📚 ${file.subject} - ${getCategoryName(file.category)}`);
+
+                        // إرسال إلى تيليجرام
+                        const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        const result = await response.json();
+
+                        if (result.ok) {
+                            successCount++;
+                            console.log(`✅ تم إرسال: ${file.name} (${i+1}/${originalFiles.length})`);
+                        } else {
+                            errorCount++;
+                            console.error(`❌ فشل إرسال: ${file.name}`, result);
+                        }
+                        
+                        // تأخير بين الإرسالات لتجنب حظر تيليجرام
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        
+                    } catch (error) {
+                        errorCount++;
+                        console.error(`❌ خطأ في إرسال ${file.name}:`, error);
+                    }
+                }
+                
+                const message = `تم إرسال ${successCount} ملف بنجاح${errorCount > 0 ? ` وفشل إرسال ${errorCount} ملف` : ''}`;
+                showSuccess(message);
+                
+            } catch (error) {
+                console.error('❌ خطأ في الإرسال:', error);
+                showError(`فشل في إرسال الملفات: ${error.message}`);
+            } finally {
+                telegramAllFilesBtn.disabled = false;
+                telegramAllFilesBtn.innerHTML = '<i class="fab fa-telegram"></i> إرسال الكل إلى تيليجرام';
+            }
+        }
+
         // الحصول على اسم القسم
         function getCategoryName(category) {
             const names = {
@@ -1893,143 +2402,21 @@
             }
         }
 
-        // فتح قاعدة بيانات IndexedDB
-        function openIDB() {
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open('PDFFilesDB', 1);
-                
-                request.onerror = () => reject(new Error('فشل في فتح قاعدة البيانات'));
-                request.onsuccess = () => resolve(request.result);
-                
-                request.onupgradeneeded = (event) => {
-                    const db = event.target.result;
-                    if (!db.objectStoreNames.contains('files')) {
-                        db.createObjectStore('files', { keyPath: 'id' });
-                    }
-                };
-            });
-        }
-
-        // حفظ ملف في IndexedDB
-        async function saveFileToIndexedDB(fileId, fileBuffer) {
-            const db = await openIDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(['files'], 'readwrite');
-                const store = transaction.objectStore('files');
-                
-                const request = store.put({
-                    id: fileId,
-                    content: fileBuffer,
-                    timestamp: new Date()
-                });
-                
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(new Error('فشل في حفظ الملف'));
-            });
-        }
-
-        // جلب ملف من IndexedDB
-        async function getFileFromIndexedDB(fileId) {
-            const db = await openIDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(['files'], 'readonly');
-                const store = transaction.objectStore('files');
-                
-                const request = store.get(fileId);
-                request.onsuccess = () => {
-                    if (request.result) {
-                        resolve(request.result.content);
-                    } else {
-                        reject(new Error('الملف غير موجود'));
-                    }
-                };
-                request.onerror = () => reject(new Error('فشل في جلب الملف'));
-            });
-        }
-
         // حذف من IndexedDB
         async function deleteFileFromIndexedDB(fileId) {
             const db = await openIDB();
             return new Promise((resolve, reject) => {
-                const transaction = db.transaction(['files'], 'readwrite');
-                const store = transaction.objectStore('files');
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
                 
                 const request = store.delete(fileId);
                 request.onsuccess = () => resolve();
                 request.onerror = () => reject(new Error('فشل في حذف الملف من التخزين المحلي'));
+                
+                transaction.oncomplete = () => {
+                    db.close();
+                };
             });
-        }
-
-        // قراءة الملف كـ ArrayBuffer
-        function readFileAsArrayBuffer(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => resolve(e.target.result);
-                reader.onerror = () => reject(new Error('فشل في قراءة الملف'));
-                reader.readAsArrayBuffer(file);
-            });
-        }
-        
-        // تحديث قائمة المواد بناءً على الملفات المتاحة
-        function updateSubjectsList() {
-            const scienceContainer = document.getElementById('science-subjects');
-            const literaryContainer = document.getElementById('literary-subjects');
-            const middleContainer = document.getElementById('middle-subjects');
-            
-            scienceContainer.innerHTML = '';
-            literaryContainer.innerHTML = '';
-            middleContainer.innerHTML = '';
-            
-            // تجميع المواد المتاحة لكل قسم
-            const scienceFiles = originalFiles.filter(f => f.category === 'science');
-            const literaryFiles = originalFiles.filter(f => f.category === 'literary');
-            const middleFiles = originalFiles.filter(f => f.category === 'middle');
-            
-            // إضافة المواد للقسم العلمي
-            fileCategories.science.forEach(subject => {
-                const hasFile = scienceFiles.some(f => f.subject === subject);
-                addSubjectItem(scienceContainer, subject, hasFile, 'science');
-            });
-            
-            // إضافة المواد للقسم الأدبي
-            fileCategories.literary.forEach(subject => {
-                const hasFile = literaryFiles.some(f => f.subject === subject);
-                addSubjectItem(literaryContainer, subject, hasFile, 'literary');
-            });
-            
-            // إضافة المواد للثالث متوسط
-            fileCategories.middle.forEach(subject => {
-                const hasFile = middleFiles.some(f => f.subject === subject);
-                addSubjectItem(middleContainer, subject, hasFile, 'middle');
-            });
-            
-            updateSelectedCount();
-        }
-        
-        // إضافة عنصر مادة
-        function addSubjectItem(container, subject, hasFile, category) {
-            const subjectItem = document.createElement('div');
-            subjectItem.className = `subject-item ${hasFile ? '' : 'disabled'}`;
-            subjectItem.innerHTML = `
-                <input type="checkbox" class="subject-checkbox" id="${category}-${subject}" 
-                       data-file="${subject}.pdf" data-category="${category}" 
-                       ${hasFile ? '' : 'disabled'}>
-                <label for="${category}-${subject}">${subject} ${hasFile ? '' : '(غير متوفر)'}</label>
-            `;
-            container.appendChild(subjectItem);
-            
-            // إضافة حدث التحديد
-            const checkbox = subjectItem.querySelector('.subject-checkbox');
-            if (hasFile) {
-                checkbox.addEventListener('change', function() {
-                    if (this.checked) {
-                        this.closest('.subject-item').classList.add('selected');
-                    } else {
-                        this.closest('.subject-item').classList.remove('selected');
-                    }
-                    updateSelectedCount();
-                });
-            }
         }
         
         // تحديث عدد المواد المحددة
@@ -2080,18 +2467,51 @@
         // متغير لتخزين السعر المختار
         let selectedPrice = 5000; // سعر افتراضي
 
-        // حدث بدء الختم - تعديل الوظيفة الحالية
-        startStampBtn.addEventListener('click', function() {
+        // 8. استبدال حدث بدء الختم بإصدار محسن
+        startStampBtn.addEventListener('click', async function() {
+            console.log('🎯 بدء عملية الختم...');
+            
             const selectedFiles = getSelectedFiles();
+            
+            console.log('📁 الملفات المحددة:', selectedFiles);
             
             if (selectedFiles.length === 0) {
                 showError('يرجى اختيار ملف واحد على الأقل');
                 return;
             }
             
-            // إظهار نافذة اختيار السعر أولاً
+            // التحقق من الملفات المفقودة
+            const allFilesExist = await repairMissingFiles();
+            if (!allFilesExist) {
+                return;
+            }
+            
+            // إظهار نافذة السعر
             showPriceModal(selectedFiles);
         });
+
+        // دالة لإصلاح الملفات المفقودة
+        async function repairMissingFiles() {
+            console.log('🔧 جاري إصلاح الملفات المفقودة...');
+            
+            const missingFiles = [];
+            
+            for (const file of originalFiles) {
+                const exists = await checkFileExists(file.id);
+                if (!exists) {
+                    missingFiles.push(file);
+                }
+            }
+            
+            if (missingFiles.length > 0) {
+                console.log(`⚠️ يوجد ${missingFiles.length} ملف مفقود في التخزين المحلي`);
+                showError(`يوجد ${missingFiles.length} ملف مفقود. يرجى إعادة تحميلهم من قسم إضافة الملفات`);
+                return false;
+            }
+            
+            console.log('✅ جميع الملفات موجودة في التخزين المحلي');
+            return true;
+        }
 
         // إظهار نافذة السعر
         function showPriceModal(selectedFiles) {
@@ -2163,282 +2583,157 @@
             }
         }
 
-        // تعديل دالة stampFiles لتأخذ السعر
+        // 6. استبدال دالة createStampedPDF بالنسخة البسيطة والموثوقة
+        async function createStampedPDF(file, customerId) {
+            console.log('🔄 بدء ختم ملف:', file.name, 'ID:', file.id);
+            
+            try {
+                // التحقق من وجود الملف أولاً
+                const fileExists = await checkFileExists(file.id);
+                if (!fileExists) {
+                    throw new Error(`الملف غير موجود في التخزين المحلي. يرجى إعادة تحميل ملف ${file.subject}`);
+                }
+                
+                // جلب الملف من IndexedDB
+                console.log('📥 جاري تحميل الملف...');
+                const fileBuffer = await getFileFromIndexedDB(file.id);
+                console.log('✅ تم تحميل الملف بنجاح');
+                
+                // معالجة PDF
+                const { PDFDocument, rgb } = PDFLib;
+                
+                console.log('📄 جاري تحميل PDF...');
+                const pdfDoc = await PDFDocument.load(fileBuffer);
+                const pages = pdfDoc.getPages();
+                
+                console.log(`📑 عدد الصفحات: ${pages.length}`);
+                
+                if (pages.length === 0) {
+                    throw new Error('ملف PDF فارغ');
+                }
+                
+                // تطبيق الختم على الصفحات المهمة
+                const pagesToStamp = new Set();
+                if (pages.length > 1) pagesToStamp.add(1);
+                if (pages.length > 2) pagesToStamp.add(2);
+                if (pages.length > 1) pagesToStamp.add(pages.length - 2);
+                if (pages.length > 0) pagesToStamp.add(pages.length - 1);
+                
+                console.log('📍 جاري ختم الصفحات...');
+                pagesToStamp.forEach(pageIndex => {
+                    const page = pages[pageIndex];
+                    const { width, height } = page.getSize();
+                    
+                    page.drawText(`${customerId}`, {
+                        x: width - 100,
+                        y: height - 40,
+                        size: 12,
+                        color: rgb(0.5, 0.5, 0.5),
+                        opacity: 0.8
+                    });
+                });
+                
+                // حفظ الملف المختوم
+                console.log('💾 جاري حفظ الملف المختوم...');
+                const stampedPdfBytes = await pdfDoc.save();
+                const stampedBlob = new Blob([stampedPdfBytes], { type: 'application/pdf' });
+                const stampedUrl = URL.createObjectURL(stampedBlob);
+                
+                console.log('✅ تم الختم بنجاح');
+                
+                return {
+                    name: `مرشحات_${file.subject}.pdf`,
+                    subject: file.subject,
+                    customerId: customerId,
+                    timestamp: new Date().toLocaleString('ar-EG'),
+                    downloadUrl: stampedUrl,
+                    blob: stampedBlob,
+                    pageCount: pages.length
+                };
+                
+            } catch (error) {
+                console.error('❌ خطأ في الختم:', error);
+                throw new Error(`فشل في ختم ملف ${file.subject}: ${error.message}`);
+            }
+        }
+
+        // تعديل دالة stampFiles لإضافة التحقق
         async function stampFiles(files, customerId, price) {
             const totalFiles = files.length;
             const stamped = [];
             
-            for (let i = 0; i < totalFiles; i++) {
-                const currentFile = files[i];
-                updateStatus(`جاري ختم ملف: ${currentFile.subject} (${i+1}/${totalFiles})<br>رقم الزبون: ${customerId}<br>السعر: ${price.toLocaleString()} دينار`, 'info');
-                updateProgress(((i) / totalFiles) * 100);
+            // التحقق من صحة الملفات أولاً
+            updateStatus('جاري التحقق من توفر الملفات...', 'info');
+            const validFiles = await validateFilesBeforeStamping(files);
+            
+            if (validFiles.length === 0) {
+                throw new Error('لا توجد ملفات صالحة للختم');
+            }
+            
+            if (validFiles.length < files.length) {
+                updateStatus(`⚠️ سيتم ختم ${validFiles.length} من أصل ${files.length} ملف`, 'info');
+            }
+            
+            for (let i = 0; i < validFiles.length; i++) {
+                const currentFile = validFiles[i];
+                updateStatus(`جاري ختم ملف: ${currentFile.subject} (${i+1}/${validFiles.length})<br>رقم الزبون: ${customerId}<br>السعر: ${price.toLocaleString()} دينار`, 'info');
+                updateProgress(((i) / validFiles.length) * 100);
                 
                 try {
                     const stampedFile = await createStampedPDF(currentFile, customerId);
                     stamped.push(stampedFile);
                     
-                    updateProgress(((i + 1) / totalFiles) * 100);
+                    updateProgress(((i + 1) / validFiles.length) * 100);
                     
                     await new Promise(resolve => setTimeout(resolve, 100));
                     
                 } catch (error) {
                     console.error('Error stamping file:', error);
-                    throw new Error(`فشل في ختم ملف ${currentFile.subject}: ${error.message}`);
+                    // الاستمرار في الملفات الأخرى بدلاً من التوقف
+                    updateStatus(`⚠️ تخطي ملف ${currentFile.subject}: ${error.message}`, 'error');
+                    continue;
                 }
             }
             
+            if (stamped.length === 0) {
+                throw new Error('فشل ختم جميع الملفات');
+            }
+            
             // استخدام السعر المختار بدلاً من FILE_PRICE الثابت
-            const totalAmount = files.length * price;
+            const totalAmount = stamped.length * price;
             todaySales += totalAmount;
             totalSales += totalAmount;
             
             // حفظ سجل البيع
-            await saveSalesRecord(customerId, files.length, price, totalAmount);
+            await saveSalesRecord(customerId, stamped.length, price, totalAmount);
             
             updateSalesDisplay();
             saveSales();
             
             return stamped;
         }
-        
-        // استبدال دالة createStampedPDF بالنسخة المحسنة
-async function createStampedPDF(file, customerId) {
-    try {
-        console.log('🔄 بدء ختم ملف:', file.name, 'ID:', file.id);
-        
-        // التحقق من وجود الملف في البيانات المحلية أولاً
-        if (!file.id) {
-            throw new Error('معرف الملف غير موجود');
-        }
 
-        // جلب محتوى الملف من IndexedDB مع معالجة الأخطاء المحسنة
-        console.log('📥 جاري تحميل الملف من IndexedDB...');
-        let fileBuffer;
-        
-        try {
-            fileBuffer = await getFileFromIndexedDB(file.id);
-            console.log('✅ تم تحميل الملف من IndexedDB، الحجم:', fileBuffer.byteLength);
-        } catch (indexedDBError) {
-            console.warn('⚠️ الملف غير موجود في IndexedDB، جاري البحث في Firebase...');
+        // دالة للتحقق من صحة الملفات قبل البدء
+        async function validateFilesBeforeStamping(files) {
+            const validFiles = [];
+            const missingFiles = [];
             
-            // محاولة الاسترجاع من Firebase كنسخة احتياطية
-            try {
-                fileBuffer = await getFileFromFirebase(file.id);
-                console.log('✅ تم استرجاع الملف من Firebase');
-                
-                // حفظ الملف في IndexedDB للمستقبل
-                await saveFileToIndexedDB(file.id, fileBuffer);
-                console.log('✅ تم حفظ الملف في IndexedDB للاستخدام المستقبلي');
-            } catch (firebaseError) {
-                throw new Error(`الملف غير متوفر في أي مصدر تخزين: ${file.name}`);
-            }
-        }
-
-        // متابعة عملية الختم العادية
-        const { PDFDocument, rgb } = PDFLib;
-        
-        console.log('📄 جاري تحميل PDF...');
-        const pdfDoc = await PDFDocument.load(fileBuffer);
-        const pages = pdfDoc.getPages();
-        
-        console.log(`📑 عدد الصفحات: ${pages.length}`);
-        
-        if (pages.length === 0) {
-            throw new Error('ملف PDF فارغ');
-        }
-        
-        // تحديد الصفحات للختم
-        const pagesToStamp = new Set();
-        if (pages.length > 1) pagesToStamp.add(1);
-        if (pages.length > 2) pagesToStamp.add(2);
-        if (pages.length > 1) pagesToStamp.add(pages.length - 2);
-        if (pages.length > 0) pagesToStamp.add(pages.length - 1);
-        
-        console.log('📍 الصفحات المختومة:', Array.from(pagesToStamp).map(p => p + 1));
-        
-        // تطبيق الختم
-        pagesToStamp.forEach(pageIndex => {
-            const page = pages[pageIndex];
-            const { width, height } = page.getSize();
-            
-            page.drawText(`${customerId}`, {
-                x: width - 100,
-                y: height - 40,
-                size: 12,
-                color: rgb(0.5, 0.5, 0.5),
-                opacity: 0.8
-            });
-        });
-        
-        // حفظ الملف المختوم
-        const stampedPdfBytes = await pdfDoc.save();
-        const stampedBlob = new Blob([stampedPdfBytes], { type: 'application/pdf' });
-        const stampedUrl = URL.createObjectURL(stampedBlob);
-        
-        console.log('✅ تم الختم بنجاح');
-        
-        return {
-            name: `مرشحات_${file.subject}.pdf`,
-            subject: file.subject,
-            customerId: customerId,
-            timestamp: new Date().toLocaleString('ar-EG'),
-            downloadUrl: stampedUrl,
-            blob: stampedBlob,
-            pageCount: pages.length
-        };
-        
-    } catch (error) {
-        console.error('❌ خطأ في الختم:', error);
-        throw new Error(`فشل في معالجة ملف PDF (${file.subject}): ${error.message}`);
-    }
-}
-
-// إضافة دالة لاسترجاع الملف من Firebase
-async function getFileFromFirebase(fileId) {
-    try {
-        console.log('🔥 جاري استرجاع الملف من Firebase...');
-        
-        // جلب البيانات الوصفية أولاً
-        const doc = await db.collection('pdfFiles').doc(fileId.toString()).get();
-        
-        if (!doc.exists) {
-            throw new Error('الملف غير موجود في Firebase');
-        }
-        
-        const fileData = doc.data();
-        
-        // إذا كان الملف مخزناً في IndexedDB ولكن ضاعت البيانات
-        if (fileData.storedIn === 'indexedDB') {
-            throw new Error('الملف مفقود من التخزين المحلي');
-        }
-        
-        // إذا كان الملف مخزناً مباشرة في Firebase (الطريقة القديمة)
-        if (fileData.fileContent) {
-            console.log('📦 الملف مخزن مباشرة في Firebase');
-            // هنا يمكن إضافة كود لتحويل base64 إلى ArrayBuffer إذا كان مخزناً بهذه الطريقة
-            throw new Error('تنسيق التخزين القديم غير مدعوم');
-        }
-        
-        throw new Error('تنسيق التخزين غير معروف');
-        
-    } catch (error) {
-        console.error('❌ خطأ في استرجاع الملف من Firebase:', error);
-        throw error;
-    }
-}
-
-// إضافة دالة للتحقق من صحة الملفات قبل البدء
-async function validateFilesBeforeStamping(files) {
-    const validFiles = [];
-    const missingFiles = [];
-    
-    for (const file of files) {
-        try {
-            // التحقق من وجود الملف في IndexedDB
-            await getFileFromIndexedDB(file.id);
-            validFiles.push(file);
-        } catch (error) {
-            console.warn(`⚠️ الملف غير متوفر: ${file.subject}`, error);
-            missingFiles.push(file.subject);
-        }
-    }
-    
-    if (missingFiles.length > 0) {
-        throw new Error(`الملفات التالية غير متوفرة: ${missingFiles.join(', ')}. يرجى إعادة تحميلها.`);
-    }
-    
-    return validFiles;
-}
-
-// تعديل دالة stampFiles لإضافة التحقق
-async function stampFiles(files, customerId, price) {
-    const totalFiles = files.length;
-    const stamped = [];
-    
-    // التحقق من صحة الملفات أولاً
-    updateStatus('جاري التحقق من توفر الملفات...', 'info');
-    const validFiles = await validateFilesBeforeStamping(files);
-    
-    if (validFiles.length === 0) {
-        throw new Error('لا توجد ملفات صالحة للختم');
-    }
-    
-    if (validFiles.length < files.length) {
-        updateStatus(`⚠️ سيتم ختم ${validFiles.length} من أصل ${files.length} ملف`, 'info');
-    }
-    
-    for (let i = 0; i < validFiles.length; i++) {
-        const currentFile = validFiles[i];
-        updateStatus(`جاري ختم ملف: ${currentFile.subject} (${i+1}/${validFiles.length})<br>رقم الزبون: ${customerId}<br>السعر: ${price.toLocaleString()} دينار`, 'info');
-        updateProgress(((i) / validFiles.length) * 100);
-        
-        try {
-            const stampedFile = await createStampedPDF(currentFile, customerId);
-            stamped.push(stampedFile);
-            
-            updateProgress(((i + 1) / validFiles.length) * 100);
-            
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-        } catch (error) {
-            console.error('Error stamping file:', error);
-            // الاستمرار في الملفات الأخرى بدلاً من التوقف
-            updateStatus(`⚠️ تخطي ملف ${currentFile.subject}: ${error.message}`, 'error');
-            continue;
-        }
-    }
-    
-    if (stamped.length === 0) {
-        throw new Error('فشل ختم جميع الملفات');
-    }
-    
-    // استخدام السعر المختار بدلاً من FILE_PRICE الثابت
-    const totalAmount = stamped.length * price;
-    todaySales += totalAmount;
-    totalSales += totalAmount;
-    
-    // حفظ سجل البيع
-    await saveSalesRecord(customerId, stamped.length, price, totalAmount);
-    
-    updateSalesDisplay();
-    saveSales();
-    
-    return stamped;
-}
-
-// إضافة زر لإعادة تحميل الملفات المفقودة
-function addReloadMissingFilesButton() {
-    const reloadButton = document.createElement('button');
-    reloadButton.className = 'btn btn-accent';
-    reloadButton.innerHTML = '<i class="fas fa-redo"></i> إعادة تحميل الملفات المفقودة';
-    reloadButton.style.marginTop = '10px';
-    reloadButton.onclick = reloadMissingFiles;
-    
-    statusMessage.parentNode.appendChild(reloadButton);
-}
-
-async function reloadMissingFiles() {
-    // هذه الدالة تحتاج إلى تنفيذ حسب نظامك
-    showError('هذه الخاصية قيد التطوير. يرجى إعادة تحميل الملفات يدوياً من قسم "إضافة الملفات"');
-}
-        
-        // الحصول على الملفات المحددة
-        function getSelectedFiles() {
-            const selected = [];
-            document.querySelectorAll('.subject-checkbox:checked').forEach(checkbox => {
-                const subjectName = checkbox.nextElementSibling.textContent.replace(' (غير متوفر)', '').trim();
-                const category = checkbox.dataset.category;
-                
-                // البحث عن الملف المناسب
-                const fileData = originalFiles.find(f => 
-                    f.subject === subjectName && f.category === category
-                );
-                
-                if (fileData) {
-                    selected.push(fileData);
+            for (const file of files) {
+                try {
+                    // التحقق من وجود الملف في IndexedDB
+                    await getFileFromIndexedDB(file.id);
+                    validFiles.push(file);
+                } catch (error) {
+                    console.warn(`⚠️ الملف غير متوفر: ${file.subject}`, error);
+                    missingFiles.push(file.subject);
                 }
-            });
-            return selected;
+            }
+            
+            if (missingFiles.length > 0) {
+                throw new Error(`الملفات التالية غير متوفرة: ${missingFiles.join(', ')}. يرجى إعادة تحميلها.`);
+            }
+            
+            return validFiles;
         }
         
         // تحديث حالة المعالجة
@@ -2557,9 +2852,38 @@ async function reloadMissingFiles() {
             }
         }
         
+        // 7. أضف زر تصحيح الأخطاء في الواجهة
+        function addDebugButton() {
+            const debugBtn = document.createElement('button');
+            debugBtn.innerHTML = '🐛 تصحيح';
+            debugBtn.style.position = 'fixed';
+            debugBtn.style.bottom = '70px';
+            debugBtn.style.right = '10px';
+            debugBtn.style.zIndex = '1000';
+            debugBtn.style.background = '#ff6b6b';
+            debugBtn.style.color = 'white';
+            debugBtn.style.border = 'none';
+            debugBtn.style.borderRadius = '50%';
+            debugBtn.style.width = '40px';
+            debugBtn.style.height = '40px';
+            debugBtn.style.fontSize = '16px';
+            debugBtn.onclick = debugFiles;
+            
+            document.body.appendChild(debugBtn);
+        }
+
         // أحداث جديدة
         salesRecordsBtn.addEventListener('click', function() {
             openSalesRecordsPage();
+        });
+
+        // أحداث الأزرار الجديدة
+        downloadAllFilesBtn.addEventListener('click', function() {
+            downloadAllOriginalFiles();
+        });
+        
+        telegramAllFilesBtn.addEventListener('click', function() {
+            sendAllFilesToTelegram();
         });
 
         // أحداث الأزرار
@@ -2621,6 +2945,9 @@ async function reloadMissingFiles() {
             updateSalesDisplay();
             updateSubjectsList();
             updateFileList();
+            
+            // أضف زر تصحيح الأخطاء
+            addDebugButton();
             
             console.log('🎉 التطبيق جاهز للاستخدام!');
         });
