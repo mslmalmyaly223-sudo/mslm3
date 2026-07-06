@@ -2,21 +2,14 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <!-- منع التكبير والتصغير لجعله كالتطبيق الأصلي -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>تطبيق الختم والمبيعات</title>
     
-    <!-- Tailwind CSS للتصميم -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- FontAwesome للأيقونات -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- مكتبة تعديل ملفات PDF -->
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 
     <style>
-        /* منع تحديد ونسخ النصوص */
         body {
             -webkit-touch-callout: none;
             -webkit-user-select: none;
@@ -26,10 +19,9 @@
             user-select: none;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: #f3f4f6;
-            overflow: hidden; /* لمنع التمرير في الجسم بالكامل */
+            overflow: hidden;
         }
 
-        /* إخفاء شريط التمرير مع بقاء قابلية التمرير */
         .no-scrollbar::-webkit-scrollbar {
             display: none;
         }
@@ -38,7 +30,6 @@
             scrollbar-width: none;
         }
 
-        /* تأثيرات التحميل (السبينر) */
         .loader {
             border: 4px solid #f3f3f3;
             border-top: 4px solid #3b82f6;
@@ -52,13 +43,11 @@
             100% { transform: rotate(360deg); }
         }
 
-        /* تأثيرات النقر */
         .tap-effect:active {
             transform: scale(0.96);
             transition: transform 0.1s;
         }
         
-        /* القوائم المنسدلة */
         .accordion-content {
             transition: max-height 0.3s ease-in-out, padding 0.3s ease;
             max-height: 0;
@@ -71,16 +60,13 @@
 </head>
 <body class="h-screen w-full flex flex-col relative text-gray-800">
 
-    <!-- شريط العنوان -->
     <header class="bg-blue-600 text-white p-4 shadow-md z-10 flex justify-between items-center rounded-b-xl">
         <h1 class="text-xl font-bold" id="header-title">الرئيسية - الختم</h1>
         <i class="fas fa-file-shield text-2xl"></i>
     </header>
 
-    <!-- منطقة المحتوى القابلة للتمرير -->
     <main class="flex-1 overflow-y-auto no-scrollbar p-4 pb-24 relative" id="main-content">
         
-        <!-- ================= القسم 1: الطلبات ================= -->
         <section id="tab-orders" class="hidden h-full flex flex-col">
             <div class="relative mb-4">
                 <input type="text" id="search-phone" placeholder="ابحث برقم الهاتف (مثال: 077...)" class="w-full p-3 pr-10 rounded-xl border border-gray-300 focus:outline-none focus:border-blue-500 shadow-sm text-left dir-ltr" oninput="filterOrders()">
@@ -91,10 +77,8 @@
             </div>
         </section>
 
-        <!-- ================= القسم 2: الإحصائيات ================= -->
         <section id="tab-stats" class="hidden">
             <div class="grid grid-cols-1 gap-6">
-                <!-- المبيعات اليومية -->
                 <div class="bg-gradient-to-r from-blue-500 to-blue-700 rounded-2xl p-6 text-white shadow-lg text-center relative overflow-hidden">
                     <i class="fas fa-calendar-day absolute opacity-20 text-7xl -right-4 -bottom-4"></i>
                     <h2 class="text-lg font-semibold mb-2">المبيعات اليومية</h2>
@@ -103,7 +87,6 @@
                     <p class="text-xs mt-4 opacity-70 bg-white bg-opacity-20 inline-block px-2 py-1 rounded-full">تتصفر يومياً 12:00 ص (بتوقيت بغداد)</p>
                 </div>
 
-                <!-- المبيعات الكلية -->
                 <div class="bg-gradient-to-r from-green-500 to-green-700 rounded-2xl p-6 text-white shadow-lg text-center relative overflow-hidden">
                     <i class="fas fa-sack-dollar absolute opacity-20 text-7xl -right-4 -bottom-4"></i>
                     <h2 class="text-lg font-semibold mb-2">المبيعات الكلية</h2>
@@ -114,18 +97,15 @@
             </div>
         </section>
 
-        <!-- ================= القسم 3: الرئيسية (الختم والبيع) ================= -->
         <section id="tab-home" class="block">
             <div class="space-y-4" id="subjects-container">
                 <div class="text-center p-4"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i> جاري تحميل المواد...</div>
             </div>
 
-            <!-- زر الختم العائم -->
             <button id="btn-start-process" onclick="startStampProcess()" class="hidden w-full mt-6 bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg tap-effect flex justify-center items-center gap-2 text-lg">
                 <i class="fas fa-stamp"></i> ختم الملفات المحددة
             </button>
 
-            <!-- زر الإرسال لتلكرام -->
             <div id="telegram-section" class="hidden mt-6 bg-white p-4 rounded-2xl shadow border border-green-200 text-center">
                 <p class="text-green-600 font-bold mb-3"><i class="fas fa-check-circle"></i> تم ختم الملفات بنجاح!</p>
                 <button onclick="sendToTelegram()" class="w-full bg-[#0088cc] text-white font-bold py-3 rounded-xl tap-effect flex justify-center items-center gap-2 transition-all">
@@ -134,7 +114,6 @@
             </div>
         </section>
 
-        <!-- ================= القسم 4: رفع الملفات الأصلية ================= -->
         <section id="tab-upload" class="hidden">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
                 <div class="text-center mb-6">
@@ -143,7 +122,6 @@
                     <p class="text-sm text-gray-500 mt-1">نظام الحفظ المتقدم (يتحمل 6 ميغابايت)</p>
                 </div>
 
-                <!-- زر اختيار الملف -->
                 <div class="mb-5 relative">
                     <input type="file" id="file-upload" accept=".pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleFileSelect(event)">
                     <div class="bg-gray-50 border-2 border-dashed border-blue-300 rounded-xl p-4 text-center text-blue-600 font-semibold tap-effect hover:bg-blue-50 transition-colors">
@@ -152,7 +130,6 @@
                     <p id="selected-filename" class="text-xs text-gray-500 mt-2 text-center text-red-500 font-bold hidden"></p>
                 </div>
 
-                <!-- القوائم (مخفية حتى يتم اختيار ملف) -->
                 <div id="upload-details" class="hidden space-y-4">
                     <div>
                         <label class="block text-sm font-bold text-gray-700 mb-1">اختر القائمة (الصف)</label>
@@ -177,7 +154,6 @@
                 </div>
             </div>
 
-            <!-- الملفات المرفوعة مسبقاً -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <h3 class="text-lg font-bold mb-4 text-gray-800 flex items-center">
                     <i class="fas fa-list-check text-blue-500 ml-2"></i> الملفات المرفوعة في النظام
@@ -190,7 +166,6 @@
 
     </main>
 
-    <!-- شريط التنقل السفلي -->
     <nav class="fixed bottom-0 w-full bg-white shadow-[0_-5px_15px_rgba(0,0,0,0.05)] flex justify-between px-2 pb-safe pt-2 rounded-t-2xl z-20">
         <button onclick="switchTab('home')" class="nav-btn flex-1 flex flex-col items-center p-2 text-blue-600 tap-effect" data-target="tab-home">
             <i class="fas fa-home text-xl mb-1"></i>
@@ -210,13 +185,11 @@
         </button>
     </nav>
 
-    <!-- شاشة التحميل الشفافة -->
     <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-60 z-50 flex flex-col justify-center items-center hidden backdrop-blur-sm">
         <div class="loader mb-4"></div>
         <p id="loading-text" class="text-white font-bold text-lg text-center px-4 whitespace-pre-wrap leading-relaxed">جاري المعالجة...</p>
     </div>
 
-    <!-- نافذة منبثقة (Modal) -->
     <div id="custom-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center hidden backdrop-blur-sm p-4">
         <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl transform transition-all scale-95" id="modal-content-box">
             <h3 id="modal-title" class="text-xl font-bold text-center mb-4 text-gray-800"></h3>
@@ -228,12 +201,10 @@
         </div>
     </div>
 
-    <!-- سكربتات Firebase -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
         import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, increment, query, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
-        // إعدادات Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyByZCncrOsQMSkPwP4VcETBgHpRylpZs8o",
             authDomain: "files-b20e5.firebaseapp.com",
@@ -246,7 +217,6 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // متغيرات عامة
         const TELEGRAM_BOT_TOKEN = "8412491014:AAGdDQUzyr76zAOh-zBFcC0Ckydo4cXhW5w";
         const TELEGRAM_CHAT_ID = "8841348445";
         const CHUNK_SIZE = 800000; 
@@ -263,7 +233,6 @@
         let currentOriginalFileBase64 = null; 
         let allOrders = [];
 
-        // --- واجهة المستخدم ---
         window.switchTab = function(tabId) {
             ['tab-home', 'tab-stats', 'tab-orders', 'tab-upload'].forEach(id => {
                 document.getElementById(id).classList.add('hidden');
@@ -328,7 +297,6 @@
             document.getElementById('modal-cancel').classList.add('hidden'); 
         }
 
-        // --- تهيئة قسم الختم ---
         async function renderSubjects() {
             const container = document.getElementById('subjects-container');
             
@@ -339,7 +307,7 @@
                     uploadedFiles.add(doc.id); 
                 });
             } catch (e) {
-                console.error("خطأ في جلب حالة الملفات", e);
+                console.error(e);
             }
 
             container.innerHTML = '';
@@ -404,7 +372,6 @@
             }
         }
 
-        // --- عملية الختم الرئيسية ---
         window.startStampProcess = function() {
             const checked = Array.from(document.querySelectorAll('.subject-checkbox:checked'));
             if(checked.length === 0) return;
@@ -442,14 +409,12 @@
             });
         }
 
-        // دالة الختم السريعة جداً (Parallel Processing)
         async function executeStamping(checkedElements, totalPrice) {
             showLoading("جاري جلب وختم جميع الملفات معاً...\n(يرجى الانتظار)");
             stampedFilesToTelegram = []; 
             let itemsList = [];
 
             try {
-                // إنشاء مصفوفة من الوعود (Promises) لتنفيذها معاً في نفس الوقت
                 const stampingPromises = checkedElements.map(async (el) => {
                     const cat = el.dataset.cat;
                     const sub = el.dataset.sub;
@@ -466,11 +431,9 @@
                     const fileName = `مرشحات ${sub}.pdf`;
                     let pdfBytes;
 
-                    // قراءة الملف حسب نوع الرفع
                     if (docData.chunksCount) {
                         let fullBase64 = "";
                         const totalChunks = docData.chunksCount;
-                        // تحميل الأجزاء بالتوازي لتسريع العملية أكثر
                         const chunkPromises = [];
                         for (let i = 0; i < totalChunks; i++) {
                             chunkPromises.push(getDoc(doc(db, "pdfChunks", `${docId}_chunk_${i}`)));
@@ -496,7 +459,6 @@
                         throw new Error("تنسيق الملف غير معروف.");
                     }
                     
-                    // الختم
                     const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
                     const pages = pdfDoc.getPages();
                     
@@ -525,10 +487,8 @@
                     return { blob: blob, fileName: fileName };
                 });
 
-                // تنفيذ جميع عمليات جلب وختم الملفات معاً في نفس اللحظة! (سريع جداً)
                 stampedFilesToTelegram = await Promise.all(stampingPromises);
 
-                // الحفظ في السجل والإحصائيات
                 showLoading("جاري تسجيل الطلب وتحديث الإحصائيات...");
                 
                 const timestampId = Date.now().toString();
@@ -560,13 +520,12 @@
                 document.getElementById('telegram-section').classList.remove('hidden');
 
             } catch (error) {
-                console.error("خطأ أثناء الختم:", error);
+                console.error(error);
                 hideLoading();
                 showMessage("حدث خطأ أثناء معالجة الملفات: " + error.message, true);
             }
         }
 
-        // --- إرسال لتلكرام (متتالي وبطء مدروس لتجنب الحظر) ---
         window.sendToTelegram = async function() {
             if(stampedFilesToTelegram.length === 0) return;
             
@@ -579,7 +538,6 @@
             for(let i = 0; i < totalFiles; i++) {
                 let fileObj = stampedFilesToTelegram[i];
                 
-                // تحديث الزر ليظهر للمستخدم رقم الملف الذي يتم إرساله حالياً
                 btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> جاري إرسال (${i + 1} من ${totalFiles})...`;
                 
                 const formData = new FormData();
@@ -594,10 +552,9 @@
                     });
                     if(res.ok) successCount++;
                 } catch(e) {
-                    console.error("فشل إرسال ملف", e);
+                    console.error(e);
                 }
                 
-                // تأخير بسيط جداً (400 ملي ثانية) لتجنب حظر تلكرام للطلبات السريعة
                 await new Promise(resolve => setTimeout(resolve, 400));
             }
 
@@ -611,7 +568,6 @@
             }
         }
 
-        // --- قسم رفع الملفات وعرضها وحذفها ---
         window.updateUploadSubjects = function() {
             const cat = document.getElementById('upload-category').value;
             const subSelect = document.getElementById('upload-subject');
@@ -701,7 +657,6 @@
             }
         }
 
-        // تحميل وعرض الملفات المرفوعة
         async function loadUploadedFiles() {
             const listContainer = document.getElementById('uploaded-files-list');
             try {
@@ -731,12 +686,11 @@
                     `;
                 });
             } catch (e) {
-                console.error("خطأ في جلب الملفات المرفوعة:", e);
+                console.error(e);
                 listContainer.innerHTML = '<div class="text-center text-red-500 text-sm py-4">حدث خطأ في جلب الملفات المرفوعة.</div>';
             }
         }
 
-        // حذف الملف المرفوع
         window.deleteUploadedFile = function(docId, subjectName, chunksCount) {
             showModal("تأكيد الحذف", `
                 <p class="text-center mb-2">هل أنت متأكد أنك تريد حذف ملف مادة <b>${subjectName}</b>؟</p>
@@ -757,14 +711,13 @@
                     loadUploadedFiles(); 
                     renderSubjects();    
                 } catch (e) {
-                    console.error("خطأ في الحذف:", e);
+                    console.error(e);
                     hideLoading();
                     showMessage("حدث خطأ أثناء محاولة الحذف.", true);
                 }
             });
         }
 
-        // --- قسم الإحصائيات والمبيعات ---
         function getBaghdadDate() {
             const options = { timeZone: 'Asia/Baghdad', year: 'numeric', month: '2-digit', day: '2-digit' };
             const formatter = new Intl.DateTimeFormat('en-US', options);
@@ -788,7 +741,7 @@
                     await setDoc(doc(db, "Statistics", "daily"), { amount: 0, lastReset: todayStr });
                 }
             } catch(e) {
-                console.error("خطأ في التحقق من التصفير اليومي", e);
+                console.error(e);
             }
         }
 
@@ -806,7 +759,6 @@
             });
         }
 
-        // --- قسم الطلبات مع الخوارزمية الجديدة والمضمونة للترتيب ---
         async function loadOrders() {
             const listContainer = document.getElementById('orders-list');
             try {
@@ -815,33 +767,24 @@
                 
                 querySnapshot.forEach((doc) => {
                     let data = doc.data();
-                    
-                    // استخراج قيمة زمنية حقيقية للترتيب مهما كان نوع الطلب (قديم أو جديد)
                     let sortValue = 0;
                     
                     if (data.timestamp && !isNaN(data.timestamp)) {
-                        // إذا كان الطلب من الإصدار الجديد ويحتوي على timestamp صحيح
                         sortValue = parseInt(data.timestamp);
                     } else if (data.id && !isNaN(data.id)) {
-                        // إذا كان الطلب قديم وكان المعرف الخاص به (id) عبارة عن أرقام (ملي ثانية)
                         sortValue = parseInt(data.id);
                     } else if (doc.id && !isNaN(doc.id)) {
-                        // إذا كان اسم المستند في قاعدة البيانات هو أرقام
                         sortValue = parseInt(doc.id);
                     }
                     
-                    // حفظ القيمة المستخرجة لاستخدامها في الترتيب
                     data._sortValue = sortValue;
-                    
                     allOrders.push(data);
                 });
                 
-                // الترتيب القاطع: من القيمة الأكبر (الأحدث) إلى القيمة الأصغر (الأقدم)
                 allOrders.sort((a, b) => b._sortValue - a._sortValue);
-                
                 renderOrders(allOrders);
             } catch (e) {
-                console.error("خطأ في جلب الطلبات", e);
+                console.error(e);
                 listContainer.innerHTML = '<div class="text-center text-red-500 mt-10">حدث خطأ في جلب الطلبات</div>';
             }
         }
@@ -858,10 +801,8 @@
             orders.forEach(order => {
                 const itemsHtml = (order.items || []).map(i => `<span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded mt-1 ml-1">${i}</span>`).join('');
                 
-                // تحسين عرض الوقت
                 let timeDisplay = order.exactTime || '';
                 if (!timeDisplay && order._sortValue > 0) {
-                    // إذا كان الطلب قديماً ولا يحتوي على exactTime، نحاول استخراجه من القيمة الزمنية
                     const dateObj = new Date(order._sortValue);
                     timeDisplay = dateObj.toLocaleDateString('ar-IQ') + ' ' + dateObj.toLocaleTimeString('ar-IQ');
                 } else if (!timeDisplay) {
@@ -894,7 +835,6 @@
             }
         }
 
-        // --- التهيئة عند بدء التشغيل ---
         window.onload = async () => {
             renderSubjects();
             await checkAndResetDaily(); 
