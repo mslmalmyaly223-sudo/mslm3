@@ -679,9 +679,14 @@
                                 <div class="font-bold text-gray-800 text-base mb-1">${file.subject}</div>
                                 <div class="text-xs text-blue-600 font-semibold bg-blue-50 px-2 py-1 rounded inline-block">${file.category}</div>
                             </div>
-                            <button onclick="deleteUploadedFile('${file.id}', '${file.subject}', ${file.chunksCount || 0})" class="bg-red-50 text-red-500 w-10 h-10 flex justify-center items-center rounded-lg tap-effect hover:bg-red-100 transition-colors">
-                                <i class="fas fa-trash-alt"></i>
-                            </button>
+                            <div class="flex gap-2">
+                                <button onclick="downloadAndSendOriginalFile('${file.id}', '${file.subject}')" class="bg-blue-50 text-blue-500 w-10 h-10 flex justify-center items-center rounded-lg tap-effect hover:bg-blue-100 transition-colors" title="تنزيل وإرسال لتلكرام">
+                                    <i class="fas fa-download"></i>
+                                </button>
+                                <button onclick="deleteUploadedFile('${file.id}', '${file.subject}', ${file.chunksCount || 0})" class="bg-red-50 text-red-500 w-10 h-10 flex justify-center items-center rounded-lg tap-effect hover:bg-red-100 transition-colors" title="حذف الملف">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
                         </div>
                     `;
                 });
@@ -839,6 +844,81 @@
             renderSubjects();
             await checkAndResetDaily(); 
         };
+        
+        window.downloadAndSendOriginalFile = async function(docId, subjectName) {
+            showLoading(`جاري جلب ملف ${subjectName} الأصلي...`);
+            try {
+                // جلب بيانات الملف من قاعدة البيانات
+                const fileDoc = await getDoc(doc(db, "pdfFiles", docId));
+                if(!fileDoc.exists()) throw new Error("الملف غير موجود في النظام!");
+
+                const docData = fileDoc.data();
+                const fileName = `النسخة_الاصلية_${subjectName}.pdf`;
+                let fullBase64 = "";
+
+                // تجميع الملف من الأجزاء (Chunks)
+                if (docData.chunksCount) {
+                    const totalChunks = docData.chunksCount;
+                    const chunkPromises = [];
+                    for (let i = 0; i < totalChunks; i++) {
+                        chunkPromises.push(getDoc(doc(db, "pdfChunks", `${docId}_chunk_${i}`)));
+                    }
+                    const chunkDocs = await Promise.all(chunkPromises);
+                    
+                    for(let chunkDoc of chunkDocs) {
+                        if(chunkDoc.exists()) {
+                            fullBase64 += chunkDoc.data().data;
+                        } else {
+                            throw new Error(`جزء مفقود من الملف، يرجى إعادة الرفع.`);
+                        }
+                    }
+                } else if (docData.base64Data) {
+                    fullBase64 = docData.base64Data; // للنظام القديم إن وجد
+                } else {
+                    throw new Error("تنسيق الملف غير معروف.");
+                }
+
+                // تحويل base64 إلى Blob
+                const base64String = fullBase64.includes(',') ? fullBase64.split(',')[1] : fullBase64;
+                const pdfBytes = Uint8Array.from(atob(base64String), c => c.charCodeAt(0));
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+
+                // 1. تنزيل الملف على الجهاز
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                // 2. إرسال الملف إلى التلكرام
+                showLoading("تم التنزيل، جاري الإرسال إلى التلكرام...");
+                const formData = new FormData();
+                formData.append('chat_id', TELEGRAM_CHAT_ID);
+                formData.append('document', blob, fileName);
+                formData.append('caption', `النسخة الأصلية\nالمادة: ${subjectName}`);
+
+                const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                hideLoading();
+
+                if(res.ok) {
+                    showMessage(`تم تنزيل ملف (${subjectName}) وإرساله إلى التلكرام بنجاح!`);
+                } else {
+                    showMessage("تم التنزيل، ولكن فشل الإرسال إلى التلكرام. تأكد من الإنترنت.", true);
+                }
+
+            } catch (error) {
+                console.error(error);
+                hideLoading();
+                showMessage("حدث خطأ: " + error.message, true);
+            }
+        }
 
     </script>
 </body>
